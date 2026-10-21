@@ -19,4 +19,17 @@ export const RoomInputVisuals = createComponent('RoomInputVisuals', {
  handedness: { type: Types.String, default: 'right' },
  mode: { type: Types.String, default: 'none' },
 });
-export default defineComponents([RoomModel, RoomInputVisuals]);
+export const RoomMeasurementMode = createComponent('RoomMeasurementMode', {
+ active: { type: Types.Boolean, default: false },
+ stage: { type: Types.String, default: 'ready' },
+ count: { type: Types.Int32, default: 0 },
+ hit: { type: Types.Boolean, default: false },
+ hitPoint: { type: Types.Vec3, default: [0,0,0] },
+});
+export const RoomDimension = createComponent('RoomDimension', {
+ model: { type: Types.Entity, default: null },
+ start: { type: Types.Vec3, default: [0,0,0] },
+ end: { type: Types.Vec3, default: [0,0,0] },
+ millimetres: { type: Types.Float32, default: 0 },
+});
+export default defineComponents([RoomModel, RoomInputVisuals, RoomMeasurementMode, RoomDimension]);

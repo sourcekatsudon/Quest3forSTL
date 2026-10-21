@@ -3,6 +3,7 @@ import projectOptions from 'virtual:iwsdk-project';
 import { DesktopApp } from './desktop';
 import { RoomSystem } from './room';
 import { RoomInputVisualSystem } from './hand-visuals';
+import { RoomMeasurementSystem } from './measurements';
 import './styles.css';
 const root=document.getElementById('app')!;
 const desktop=new DesktopApp(root);
@@ -15,6 +16,7 @@ async function initialize(){
   world=await World.create(xrContainer,projectOptions);
   world.registerSystem(RoomInputVisualSystem);
   world.registerSystem(RoomSystem);
+  world.registerSystem(RoomMeasurementSystem);
   const room=world.getSystem(RoomSystem)!;
   desktop.onXRRequest=()=>{
    world.renderer.xr.setReferenceSpaceType('local-floor');

@@ -29,7 +29,8 @@
     "meshoptimizer": "^1.3.0",
     "occt-import-js": "^0.0.23",
     "qrcode": "^1.5.4",
-    "three": "npm:super-three@0.181.0"
+    "three": "npm:super-three@0.181.0",
+    "three-mesh-bvh": "0.9.16"
   },
   "devDependencies": {
     "@iwsdk/cli": "1.0.1",

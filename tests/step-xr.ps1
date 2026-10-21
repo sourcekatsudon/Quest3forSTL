@@ -11,6 +11,7 @@ function Point($Selector,$Fraction=.5,$Nested=$false){
  $element=(Iw 'ui' 'inspect' @{entityIndex=$panel;selector=$Selector}).elements[0]
  $x=$element.layout.relativeCenter[0]+($Fraction-.5)*$element.layout.size[0];$y=$element.layout.relativeCenter[1]
  if($Nested){$parent=(Iw 'ui' 'inspect' @{entityIndex=$panel;selector='#ExplosionControls'}).elements[0];$x+=$parent.layout.relativeCenter[0];$y+=$parent.layout.relativeCenter[1]}
+ $normal=(Iw 'ui' 'inspect' @{entityIndex=$panel;selector='#NormalControls'}).elements[0];$x+=$normal.layout.relativeCenter[0];$y+=$normal.layout.relativeCenter[1]
  $transform=Values (Iw 'ecs' 'query' @{entityIndex=$panel;components=@('Transform')}) 'Transform'
  $q=$transform.orientation;$v=[System.Numerics.Vector3]::new($x*.01,$y*.01,0);$quat=[System.Numerics.Quaternion]::new($q[0],$q[1],$q[2],$q[3]);$v=[System.Numerics.Vector3]::Transform($v,$quat)
  return @{x=$transform.position[0]+$v.X;y=$transform.position[1]+$v.Y;z=$transform.position[2]+$v.Z}
@@ -54,5 +55,3 @@ $reset=State;$room=Values $reset 'RoomModel'
 Check 'reset restores assembly and closes slider' ($room.explosion -eq 0 -and !$room.explosionOpen)
 Check 'reset restores original model scale' ([Math]::Abs((Values $reset 'Transform').scale[0]-$room.homeScale)-lt .00001)
 @{passed=$true;checks=$checks.ToArray();assembled=$zero;exploded=$expanded;held=$held;moved=$moved;reset=$reset}|ConvertTo-Json -Depth 20|Set-Content -Encoding UTF8 artifacts/step-xr-results.json
-
-

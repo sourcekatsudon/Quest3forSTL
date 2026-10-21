@@ -1,7 +1,7 @@
 import {
  World, createSystem, Entity, Vector3, Quaternion, Mesh, MeshStandardMaterial,
  BoxGeometry, PhysicsBody, PhysicsShape, PhysicsShapeType, PhysicsState,
- PhysicsSystem, GrabSystem, Grabbed, TwoHandsGrabbable, RayInteractable,
+ PhysicsSystem, GrabSystem, Grabbed, TwoHandsGrabbable, RayInteractable, SkinnedMesh,
  BoxHelper, FollowBehavior, Follower, UIKitMLAsset, VisibilityState,
  Object3D, EnvironmentRaycastTarget, RaycastSpace, PhysicsManipulation, Box3, XRMesh, MeshPhysicalMaterial, Color, Texture,
 } from '@iwsdk/core';
@@ -58,6 +58,8 @@ export class RoomSystem extends createSystem({
  private materialBounds=new Box3();
  private materialCenter=new Vector3();
  private explosionSlider!:Slider;
+ measurementLocked=false;
+ private measurementRestore=new Map<Entity,{playing:boolean;pointers?:Object3D['pointerEvents']}>();
 
  init() {
   this.controls = this.world.requireSceneObject<UIKitMLAsset>('RoomControls');
@@ -173,6 +175,7 @@ export class RoomSystem extends createSystem({
   }
  }
  private text(id:string,text:string){this.setLabel(this.controls,id,text);}
+ setControlLabel(id:string,text:string){this.text(id,text);}
  private setLabel(panel:UIKitMLAsset,id:string,text:string){
   if(this.renderedText.get(id)===text)return;
   const target=panel.getElementById(id);if(!target)return;
@@ -196,6 +199,7 @@ export class RoomSystem extends createSystem({
   this.controls.getElementById('Gravity')?.setProperties({backgroundColor:on?'#b9dfe4':'#e5f2f4'});
  }
  private toggleGravity(){
+  if(this.measurementLocked)return;
   const entity=this.selected;if(!entity)return;
   const on=!entity.getValue(RoomModel,'gravity');entity.setValue(RoomModel,'gravity',on);
   if(entity.hasComponent(PhysicsBody))entity.setValue(PhysicsBody,'gravityFactor',on?1:0);
@@ -211,6 +215,7 @@ export class RoomSystem extends createSystem({
   for(const [id,name] of [['Glass','glass'],['Aluminum','aluminum'],['SUS','sus'],['Plastic','plastic']])this.materialsPanel.getElementById(id)?.setProperties({backgroundColor:chosen===name?'#b9dfe4':'#e5f2f4'});
  }
  private setAnimationPlaying(playing:boolean){
+  if(this.measurementLocked)return;
   const entity=this.selected,playback=entity?this.playbacks.get(entity):undefined;if(!entity||!playback)return;
   playback.setPlaying(playing);entity.setValue(RoomModel,'animationPlaying',playback.playing);this.renderPlayback();
  }
@@ -271,6 +276,7 @@ export class RoomSystem extends createSystem({
   this.lastBottom.set(entity,bounds.min.y+lift);
  }
  async addChosen(parsed?:ParsedModel,recordOverride?:ModelRecord) {
+  if(this.measurementLocked)return;
   const selectedRecord=recordOverride??this.chosen;
   if(!selectedRecord||this.loading) return;
   if(this.queries.models.entities.size>=MAX_INSTANCES){this.text('Selection','モデルは8個まで追加できます');return;}
@@ -284,7 +290,7 @@ export class RoomSystem extends createSystem({
    if(!parsed){
     parsed=await this.loadRecord(record);owned=true;
    }
-   if(!this.active){if(owned)disposeParsed(parsed);return;}
+   if(!this.active||this.measurementLocked){if(owned)disposeParsed(parsed);return;}
    const material=surfaceMaterial('plastic','#b4b9bc');
    const assembly=parsed.parts&&parsed.parts.length>1?createAssembly(parsed,material):undefined;
    const mesh=parsed.scene?cloneModelScene(parsed.scene):assembly?.group??new Mesh(parsed.geometry.clone(),material);
@@ -333,6 +339,7 @@ export class RoomSystem extends createSystem({
   this.explosionSlider?.setProperties({value:Math.round(value*100)});
  }
  private setExplosion(value:number){
+  if(this.measurementLocked)return;
   const entity=this.selected,parts=entity?this.assemblies.get(entity):undefined;
   if(!entity?.object3D||!parts)return;
   const amount=Math.max(0,Math.min(1,Number.isFinite(value)?value:0));
@@ -350,6 +357,7 @@ export class RoomSystem extends createSystem({
   this.rebuildCollider(entity,true);this.renderExplosion();
  }
  resetSelected(actualSize=false){
+  if(this.measurementLocked)return;
   const entity=this.selected;if(!entity?.object3D)return;
   this.world.getSystem(GrabSystem)?.forceRelease(entity);
   this.setExplosion(0);entity.setValue(RoomModel,'explosionOpen',false);this.renderExplosion();
@@ -364,6 +372,7 @@ export class RoomSystem extends createSystem({
   this.rebuildCollider(entity,true);
  }
  deleteSelected(){
+  if(this.measurementLocked)return;
   const entity=this.selected;if(!entity)return;
   this.world.getSystem(GrabSystem)?.forceRelease(entity);
   this.playbacks.get(entity)?.dispose();this.playbacks.delete(entity);
@@ -372,6 +381,32 @@ export class RoomSystem extends createSystem({
   this.rebuiltBodies.delete(entity);
   this.outlineEntity?.dispose();this.outlineEntity=null;this.outline=null;
   this.text('Selection','モデルを追加できます');this.text('Scale','');
+ }
+ setMeasurementLock(locked:boolean){
+  if(locked===this.measurementLocked)return;
+  this.measurementLocked=locked;
+  if(locked){
+   for(const entity of this.queries.models.entities){
+    const body=entity.hasComponent(PhysicsBody),playback=this.playbacks.get(entity);
+    this.measurementRestore.set(entity,{playing:playback?.playing??false,pointers:entity.object3D?.pointerEvents});
+    this.world.getSystem(GrabSystem)?.forceRelease(entity);
+    if(entity.object3D)entity.object3D.pointerEvents='none';
+    if(body&&entity.hasComponent(PhysicsBody)){
+     this.rebuildCollider(entity,true);
+    }
+    playback?.setPlaying(false);entity.setValue(RoomModel,'animationPlaying',false);
+    entity.object3D?.traverse(child=>{if(child instanceof SkinnedMesh){child.computeBoundingBox();child.computeBoundingSphere();}});
+   }
+  }else{
+   for(const [entity,saved] of this.measurementRestore){
+    if(!this.queries.models.entities.has(entity))continue;
+    if(entity.object3D)entity.object3D.pointerEvents=saved.pointers;
+    if(entity.hasComponent(PhysicsBody))this.rebuildCollider(entity,true);
+    const playback=this.playbacks.get(entity);playback?.setPlaying(saved.playing);entity.setValue(RoomModel,'animationPlaying',playback?.playing??false);
+   }
+   this.measurementRestore.clear();
+  }
+  this.renderPlayback();
  }
  private placePanels(){
   this.player.head.getWorldPosition(this.origin);this.player.head.getWorldQuaternion(this.facing);
@@ -459,7 +494,7 @@ export class RoomSystem extends createSystem({
   if(!this.active)return;
   for(const [entity,playback] of this.playbacks){if(this.queries.models.entities.has(entity))playback.update(delta);}
   for(const [entity,saved] of this.rebuiltBodies){
-   entity.addComponent(PhysicsBody,{state:entity.getValue(RoomModel,'gravity')?PhysicsState.Dynamic:PhysicsState.Kinematic,gravityFactor:saved.gravity,linearDamping:.12,angularDamping:.15});
+   entity.addComponent(PhysicsBody,{state:this.measurementLocked?PhysicsState.Kinematic:entity.getValue(RoomModel,'gravity')?PhysicsState.Dynamic:PhysicsState.Kinematic,gravityFactor:this.measurementLocked?0:saved.gravity,linearDamping:.12,angularDamping:.15});
    entity.addComponent(PhysicsManipulation,{linearVelocity:saved.velocity,angularVelocity:saved.angular});
   }
   this.rebuiltBodies.clear();
@@ -468,6 +503,10 @@ export class RoomSystem extends createSystem({
   if(this.selected?.object3D)this.text('Scale',`倍率 ${Math.round(this.selected.object3D.scale.x*100)}%`);
   if(++this.frameCount%15===0){this.syncSurfaces();this.syncMeshColliders();}
   this.placeMaterialPanel();
+  if(this.measurementLocked){
+   for(const entity of this.queries.models.entities)if(entity.object3D)entity.object3D.pointerEvents='none';
+   return;
+  }
   for(const entity of this.queries.models.entities){
    const object=entity.object3D;if(!object)continue;
    object.scale.setScalar(Math.max(.001,Math.min(100,object.scale.x)));
@@ -479,6 +518,7 @@ export class RoomSystem extends createSystem({
   }
  }
  private endSession(){
+  this.measurementLocked=false;this.measurementRestore.clear();
   for(const playback of this.playbacks.values())playback.dispose();this.playbacks.clear();
   this.selected=null;this.drag=null;this.lastBottom.clear();this.materialsPanel.visible=false;
   this.assemblies.clear();this.renderExplosion();

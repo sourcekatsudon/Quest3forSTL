@@ -5,6 +5,8 @@
 </style>
 <div class="root">
 <img id="Selection" class="label" src="/ui/labels/title.png" />
+<button id="Measure" class="btn"><img id="MeasureLabel" class="label" src="/ui/labels/title.png" /></button>
+<div id="NormalControls" style="flex-direction:column;gap:1.5">
 <button id="Reset" class="btn"><img id="ResetLabel" class="label" src="/ui/labels/reset.png" /></button>
 <button id="ActualSize" class="btn"><img id="ActualSizeLabel" class="label" src="/ui/labels/actual.png" /></button>
 <button id="Delete" class="btn"><img id="DeleteLabel" class="label" src="/ui/labels/delete.png" /></button>
@@ -17,6 +19,13 @@
 </div>
 <img id="Scale" class="label" src="/ui/labels/scale.png" />
 <img id="Surface" class="label" src="/ui/labels/surface.png" />
+</div>
+<div id="MeasurementControls" style="display:none;flex-direction:column;gap:1.5">
+<img id="MeasureHint" class="label" src="/ui/labels/title.png" />
+<img id="MeasureCount" class="label" src="/ui/labels/title.png" />
+<button id="MeasureAdd" class="btn"><img id="MeasureAddLabel" class="label" src="/ui/labels/add.png" /></button>
+<button id="MeasureReset" class="btn"><img id="MeasureResetLabel" class="label" src="/ui/labels/reset.png" /></button>
+</div>
 </div>
 
 
