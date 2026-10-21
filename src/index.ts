@@ -4,6 +4,7 @@ import { DesktopApp } from './desktop';
 import { RoomSystem } from './room';
 import { RoomInputVisualSystem } from './hand-visuals';
 import { RoomMeasurementSystem } from './measurements';
+import { RoomPhotoSystem } from './photo-capture';
 import './styles.css';
 const root=document.getElementById('app')!;
 const desktop=new DesktopApp(root);
@@ -17,6 +18,7 @@ async function initialize(){
   world.registerSystem(RoomInputVisualSystem);
   world.registerSystem(RoomSystem);
   world.registerSystem(RoomMeasurementSystem);
+  world.registerSystem(RoomPhotoSystem);
   const room=world.getSystem(RoomSystem)!;
   desktop.onXRRequest=()=>{
    world.renderer.xr.setReferenceSpaceType('local-floor');

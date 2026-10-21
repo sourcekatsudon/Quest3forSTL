@@ -32,4 +32,9 @@ export const RoomDimension = createComponent('RoomDimension', {
  end: { type: Types.Vec3, default: [0,0,0] },
  millimetres: { type: Types.Float32, default: 0 },
 });
-export default defineComponents([RoomModel, RoomInputVisuals, RoomMeasurementMode, RoomDimension]);
+export const RoomPhotoCapture = createComponent('RoomPhotoCapture', {
+ stage: { type: Types.String, default: 'ready' },
+ progress: { type: Types.Float32, default: 0 },
+ photoId: { type: Types.String, default: '' },
+});
+export default defineComponents([RoomModel, RoomInputVisuals, RoomMeasurementMode, RoomDimension, RoomPhotoCapture]);

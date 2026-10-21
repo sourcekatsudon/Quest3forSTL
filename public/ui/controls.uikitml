@@ -5,6 +5,7 @@
 </style>
 <div class="root">
 <img id="Selection" class="label" src="/ui/labels/title.png" />
+<button id="Photo" class="btn"><img id="PhotoLabel" class="label" src="/ui/labels/title.png" /></button>
 <button id="Measure" class="btn"><img id="MeasureLabel" class="label" src="/ui/labels/title.png" /></button>
 <div id="NormalControls" style="flex-direction:column;gap:1.5">
 <button id="Reset" class="btn"><img id="ResetLabel" class="label" src="/ui/labels/reset.png" /></button>

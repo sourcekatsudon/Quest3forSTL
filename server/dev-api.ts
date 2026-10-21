@@ -2,20 +2,28 @@ import type { Plugin } from 'vite';
 import { LocalStore } from './local-store';
 import { ApiError, idPattern, limits, MAX_THUMBNAIL_BYTES } from './validation';
 import type { ModelCommit } from '../shared/models';
+import { LocalPhotoStore, photoId } from './photos';
+import { photoLimits } from '../shared/photos';
 
 export function stlRoomApi(): Plugin {
   const store = new LocalStore();
+  const photos = new LocalPhotoStore();
   const rates = new Map<string, { count: number; expires: number }>();
   return {
     name: 'stl-room-local-api',
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const url = new URL(req.url || '/', 'http://localhost');
-        if (!['/api/models', '/api/local-upload', '/api/assets'].includes(url.pathname)) return next();
+        if (!['/api/models', '/api/local-upload', '/api/assets', '/api/photos'].includes(url.pathname)) return next();
         res.setHeader('Cache-Control', 'no-store');
         res.setHeader('X-Content-Type-Options', 'nosniff');
         const json = (body: unknown, status = 200) => { res.statusCode = status; res.setHeader('Content-Type', 'application/json; charset=utf-8'); res.end(JSON.stringify(body)); };
         try {
+          if (req.method === 'GET' && url.pathname === '/api/photos') {
+            if (!url.searchParams.has('id')) return json({ photos: await photos.list(), limits: photoLimits });
+            const bytes = await photos.asset(photoId(url.searchParams.get('id')));
+            res.setHeader('Content-Type', 'image/jpeg'); res.end(bytes); return;
+          }
           if (req.method === 'GET' && url.pathname === '/api/models') return json({ models: await store.list(), storage: 'local', limits });
           if (req.method === 'GET' && url.pathname === '/api/assets') {
             const id = url.searchParams.get('id') || '';
@@ -44,7 +52,7 @@ export function stlRoomApi(): Plugin {
           const rate = rates.get(key) || { count: 0, expires: now + 60_000 };
           if (++rate.count > 30) throw new ApiError(429, '少し待ってからお試しください。');
           rates.set(key, rate);
-          const maximum = url.pathname === '/api/models' ? 4096 : url.searchParams.get('kind') === 'thumbnail' ? MAX_THUMBNAIL_BYTES : limits.maxFileBytes;
+          const maximum = url.pathname === '/api/photos' ? photoLimits.maxBytes : url.pathname === '/api/models' ? 4096 : url.searchParams.get('kind') === 'thumbnail' ? MAX_THUMBNAIL_BYTES : limits.maxFileBytes;
           if (Number(req.headers['content-length'] || 0) > maximum) throw new ApiError(413, 'ファイルの容量上限を超えています。');
           const chunks: Buffer[] = [];
           let size = 0;
@@ -54,6 +62,7 @@ export function stlRoomApi(): Plugin {
             chunks.push(Buffer.from(chunk));
           }
           const bytes = Buffer.concat(chunks);
+          if (url.pathname === '/api/photos') return json({ photo: await photos.save(photoId(url.searchParams.get('id')), bytes) }, 201);
           if (url.pathname === '/api/local-upload') return json(await store.upload(bytes, url.searchParams.get('kind') || 'model', url.searchParams.get('name') || 'model.stl'), 201);
           if (url.pathname === '/api/models') return json({ model: await store.commit(JSON.parse(bytes.toString()) as ModelCommit) }, 201);
           throw new ApiError(404, 'APIが見つかりません。');
