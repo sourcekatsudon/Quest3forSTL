@@ -12,6 +12,8 @@ export const RoomModel = createComponent('RoomModel', {
  gravity: { type: Types.Boolean, default: false },
  materialPreset: { type: Types.String, default: 'plastic' },
  tint: { type: Types.String, default: '#b4b9bc' },
+ animationCount: { type: Types.Int32, default: 0 },
+ animationPlaying: { type: Types.Boolean, default: false },
 });
 export const RoomInputVisuals = createComponent('RoomInputVisuals', {
  handedness: { type: Types.String, default: 'right' },

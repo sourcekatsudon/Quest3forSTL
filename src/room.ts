@@ -13,6 +13,7 @@ import { createAssembly, applyExplosion, type ExplodedPart } from './assembly';
 import {indoorEnvironment,replaceSurface,surfaceMaterial} from './materials';
 import {tableLift} from './surfaces';
 import {renderThumbnail} from './thumbnail';
+import {ModelPlayback} from './playback';
 import type { AssemblyData } from '../shared/models';
 
 const MAX_INSTANCES = 8;
@@ -53,6 +54,9 @@ export class RoomSystem extends createSystem({
  private onLibrary?: ()=>void;
  private renderedText=new Map<string,string>();
  private assemblies=new Map<Entity,ExplodedPart[]>();
+ private playbacks=new Map<Entity,ModelPlayback>();
+ private materialBounds=new Box3();
+ private materialCenter=new Vector3();
  private explosionSlider!:Slider;
 
  init() {
@@ -71,6 +75,8 @@ export class RoomSystem extends createSystem({
   bind(this.controls,'Delete',()=>this.deleteSelected());
   bind(this.controls,'Gravity',()=>this.toggleGravity());
   bind(this.controls,'Recall',()=>this.recallPanels());
+  bind(this.materialsPanel,'AnimationPlay',()=>this.setAnimationPlaying(true));
+  bind(this.materialsPanel,'AnimationStop',()=>this.setAnimationPlaying(false));
   for(const [id,preset] of [['Glass','glass'],['Aluminum','aluminum'],['SUS','sus'],['Plastic','plastic']])bind(this.materialsPanel,id,()=>this.setSurface(preset));
   for(const [i,color] of ['#e9ecef','#343a40','#c84646','#327dc4','#d6ad44','#529a70','#9964b2','#e48b47'].entries())bind(this.materialsPanel,`Color${i}`,()=>this.setSurface(undefined,color));
   bind(this.controls,'Explode',()=>{
@@ -140,6 +146,8 @@ export class RoomSystem extends createSystem({
   this.setLabel(this.libraryPanel,'DragHint','サムネイルをドラッグして追加');
   for(const [id,label] of [['MaterialTitle','表面の質感・色'],['GlassLabel','ガラス'],['AluminumLabel','アルミ'],['SUSLabel','SUS'],['PlasticLabel','プラスチック']])this.setLabel(this.materialsPanel,id,label);
   this.renderGravity();
+  this.setLabel(this.materialsPanel,'AnimationPlayLabel','再生');this.setLabel(this.materialsPanel,'AnimationStopLabel','停止');
+  this.renderPlayback();
   for(const [id,label] of [['LibraryTitle','モデルライブラリ'],['AddLabel','追加'],['PreviousLabel','前のモデル'],['NextLabel','次のモデル']]){
    this.setLabel(this.libraryPanel,id,label);
   }
@@ -202,12 +210,33 @@ export class RoomSystem extends createSystem({
   replaceSurface(entity.object3D,chosen,color);entity.setValue(RoomModel,'materialPreset',chosen);entity.setValue(RoomModel,'tint',color);
   for(const [id,name] of [['Glass','glass'],['Aluminum','aluminum'],['SUS','sus'],['Plastic','plastic']])this.materialsPanel.getElementById(id)?.setProperties({backgroundColor:chosen===name?'#b9dfe4':'#e5f2f4'});
  }
+ private setAnimationPlaying(playing:boolean){
+  const entity=this.selected,playback=entity?this.playbacks.get(entity):undefined;if(!entity||!playback)return;
+  playback.setPlaying(playing);entity.setValue(RoomModel,'animationPlaying',playback.playing);this.renderPlayback();
+ }
+ private renderPlayback(){
+  const playback=this.selected?this.playbacks.get(this.selected):undefined;
+  this.materialsPanel.getElementById('AnimationControls')?.setProperties({display:playback?.count?'flex':'none'});
+  this.materialsPanel.getElementById('AnimationPlay')?.setProperties({backgroundColor:playback?.playing?'#b9dfe4':'#e5f2f4'});
+  this.materialsPanel.getElementById('AnimationStop')?.setProperties({backgroundColor:playback&&!playback.playing?'#b9dfe4':'#e5f2f4'});
+ }
  private placeMaterialPanel(){
   const object=this.selected?.object3D;if(!object||!this.active){this.materialsPanel.visible=false;return;}
-  const bounds=new Box3().setFromObject(object),center=bounds.getCenter(new Vector3()),size=bounds.getSize(new Vector3());
+  const animated=!!this.playbacks.get(this.selected!)?.count;
+  const bounds=this.materialBounds;
+  let clearance=.17;
+  if(animated){
+   // Skin bounds cache the initial pose. Keep controls stable above that pose,
+   // with room for moving limbs, rather than letting the menu bob with the clip.
+   const e=this.selected!.getVectorView(RoomModel,'extents');
+   bounds.min.set(-e[0]/2,-e[1]/2,-e[2]/2);bounds.max.set(e[0]/2,e[1]/2,e[2]/2);
+   object.updateWorldMatrix(true,false);bounds.applyMatrix4(object.matrixWorld);
+   clearance+=Math.max(.12,Math.min(.35,Math.max(e[0],e[1],e[2])*object.scale.x*.5));
+  }else bounds.setFromObject(object);
+  const center=bounds.getCenter(this.materialCenter);
   this.player.head.getWorldPosition(this.scratch);this.player.head.getWorldQuaternion(this.facing);
   const right=new Vector3(1,0,0).applyQuaternion(this.facing);right.y=0;right.normalize();
-  this.materialsPanel.position.copy(center);this.materialsPanel.position.y=bounds.max.y+.17;this.materialsPanel.scale.setScalar(.75);this.materialsPanel.lookAt(this.scratch);this.materialsPanel.visible=true;
+  this.materialsPanel.position.copy(center);this.materialsPanel.position.y=bounds.max.y+clearance;this.materialsPanel.scale.setScalar(.75);this.materialsPanel.lookAt(this.scratch);this.materialsPanel.visible=true;
  }
  private recallPanels(){
   this.player.head.getWorldPosition(this.origin);this.player.head.getWorldQuaternion(this.facing);
@@ -271,7 +300,9 @@ export class RoomSystem extends createSystem({
    mesh.quaternion.identity();
    const entity=this.world.createTransformEntity(mesh,{persistent:true});
    const extents:[number,number,number]=[Math.max(.001,record.dimensions.width*.001),Math.max(.001,record.dimensions.height*.001),Math.max(.001,record.dimensions.depth*.001)];
-   entity.addComponent(RoomModel,{assetId:record.id,homePosition:mesh.position.toArray(),homeScale:scale,colliderScale:scale,extents,triangles:parsed.triangles,partCount:assembly?.parts.length??1,materialPreset:parsed.scene?'original':'plastic'});
+   const playback=mesh.animations.length?new ModelPlayback(mesh):undefined;
+   entity.addComponent(RoomModel,{assetId:record.id,homePosition:mesh.position.toArray(),homeScale:scale,colliderScale:scale,extents,triangles:parsed.triangles,partCount:assembly?.parts.length??1,materialPreset:parsed.scene?'original':'plastic',animationCount:playback?.count??0,animationPlaying:playback?.playing??false});
+   if(playback)this.playbacks.set(entity,playback);
    if(assembly)this.assemblies.set(entity,assembly.parts);
    entity.addComponent(RayInteractable);
    entity.addComponent(TwoHandsGrabbable,{translate:true,rotate:true,scale:true});
@@ -289,7 +320,7 @@ export class RoomSystem extends createSystem({
   this.outlineEntity=this.world.createTransformEntity(this.outline,{persistent:true});
   const record=this.library.find(m=>m.id===entity.getValue(RoomModel,'assetId'));
   this.text('Selection',record?.name??'Quest3でSTLファイルを立体で見るアプリ');
-  this.renderExplosion();this.renderGravity();this.materialsPanel.visible=true;
+  this.renderExplosion();this.renderGravity();this.renderPlayback();this.materialsPanel.visible=true;
  }
  private renderExplosion(){
   const entity=this.selected,available=!!entity&&this.assemblies.has(entity);
@@ -335,6 +366,7 @@ export class RoomSystem extends createSystem({
  deleteSelected(){
   const entity=this.selected;if(!entity)return;
   this.world.getSystem(GrabSystem)?.forceRelease(entity);
+  this.playbacks.get(entity)?.dispose();this.playbacks.delete(entity);
   this.selected=null;entity.dispose();this.lastBottom.delete(entity);this.materialsPanel.visible=false;
   this.assemblies.delete(entity);this.renderExplosion();
   this.rebuiltBodies.delete(entity);
@@ -423,8 +455,9 @@ export class RoomSystem extends createSystem({
   for(let i=0;i<3;i++)dimensions[i]=extents[i]*entity.object3D.scale.x;
   entity.setValue(RoomModel,'colliderScale',entity.object3D.scale.x);
  }
- update(){
+ update(delta:number){
   if(!this.active)return;
+  for(const [entity,playback] of this.playbacks){if(this.queries.models.entities.has(entity))playback.update(delta);}
   for(const [entity,saved] of this.rebuiltBodies){
    entity.addComponent(PhysicsBody,{state:entity.getValue(RoomModel,'gravity')?PhysicsState.Dynamic:PhysicsState.Kinematic,gravityFactor:saved.gravity,linearDamping:.12,angularDamping:.15});
    entity.addComponent(PhysicsManipulation,{linearVelocity:saved.velocity,angularVelocity:saved.angular});
@@ -446,6 +479,7 @@ export class RoomSystem extends createSystem({
   }
  }
  private endSession(){
+  for(const playback of this.playbacks.values())playback.dispose();this.playbacks.clear();
   this.selected=null;this.drag=null;this.lastBottom.clear();this.materialsPanel.visible=false;
   this.assemblies.clear();this.renderExplosion();
   for(const entity of [...this.queries.models.entities])entity.dispose();

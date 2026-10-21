@@ -11,4 +11,5 @@
 <div class="row"><button id="SUS" class="btn"><img id="SUSLabel" class="label" src="/ui/labels/title.png" /></button><button id="Plastic" class="btn"><img id="PlasticLabel" class="label" src="/ui/labels/title.png" /></button></div>
 <div class="row"><button id="Color0" class="color" style="background-color:#e9ecef" /><button id="Color1" class="color" style="background-color:#343a40" /><button id="Color2" class="color" style="background-color:#c84646" /><button id="Color3" class="color" style="background-color:#327dc4" /></div>
 <div class="row"><button id="Color4" class="color" style="background-color:#d6ad44" /><button id="Color5" class="color" style="background-color:#529a70" /><button id="Color6" class="color" style="background-color:#9964b2" /><button id="Color7" class="color" style="background-color:#e48b47" /></div>
+<div id="AnimationControls" class="row" style="display:none"><button id="AnimationPlay" class="btn"><img id="AnimationPlayLabel" class="label" src="/ui/labels/title.png" /></button><button id="AnimationStop" class="btn"><img id="AnimationStopLabel" class="label" src="/ui/labels/title.png" /></button></div>
 </div>

@@ -6,7 +6,8 @@ import {
 } from '@iwsdk/core';
 import QRCode from 'qrcode';
 import { ModelLibrary, type ModelRecord } from './library';
-import { loadSTL, loadGLB, cloneModelScene, disposeParsed, type ParsedModel } from './model';
+import { loadSTL, loadGLB, cloneModelScene, disposeParsed, disposeModelScene, type ParsedModel } from './model';
+import { ModelPlayback } from './playback';
 import './styles.css';
 import type { AssemblyData } from '../shared/models';
 import { createAssembly, applyExplosion, assemblyRadius, type ExplodedPart } from './assembly';
@@ -36,6 +37,7 @@ export class DesktopApp {
   private camera = new PerspectiveCamera(36, 1, 0.0001, 10000);
   private group = new Group();
   private model: Mesh | Group | null = null;
+  private playback: ModelPlayback | null = null;
   private assemblyParts: ExplodedPart[] = [];
   private explosion = 0;
   private lines: LineSegments | null = null;
@@ -239,13 +241,15 @@ export class DesktopApp {
   private display(record: ModelRecord, parsed: ParsedModel): void {
     this.active = record;
     const previousParsed=this.parsed;this.parsed = parsed;
-    if (this.model) {this.group.remove(this.model);if(previousParsed?.scene)this.model.traverse(child=>{if(child instanceof Mesh){child.geometry.dispose();for(const m of Array.isArray(child.material)?child.material:[child.material])m.dispose();}});}
+    this.playback?.dispose();this.playback=null;
+    if (this.model) {this.group.remove(this.model);if(previousParsed?.scene)disposeModelScene(this.model);}
     for(const part of this.assemblyParts)part.mesh.geometry.dispose();
     this.assemblyParts=[];this.explosion=0;
     if(parsed.parts && parsed.parts.length>1){
       const assembly=createAssembly(parsed,this.material);this.model=assembly.group;this.assemblyParts=assembly.parts;
     }else this.model = parsed.scene ? cloneModelScene(parsed.scene) : new Mesh(parsed.geometry, this.material);
     this.model.name = 'DesktopModel'; this.group.add(this.model);
+    if(parsed.animations?.length)this.playback=new ModelPlayback(this.model);
     const explodeButton=this.host.querySelector('.explode-button') as HTMLButtonElement;
     explodeButton.disabled=this.assemblyParts.length<2;
     explodeButton.title=explodeButton.disabled?'部品構成のあるSTEPで利用できます':'部品を離して表示する';
@@ -315,6 +319,7 @@ export class DesktopApp {
     if (this.disposed) return;
     const delta = Math.min((time - this.previousTime) / 1000, .05); this.previousTime = time;
     if (this.renderer && !this.immersive && !document.hidden) {
+      this.playback?.update(delta);
       if (this.model && !this.pointers.size && time - this.lastInput > 3000 && !reducedMotion) this.group.rotation.y += delta * .12;
       this.camera.position.set(this.target.x + this.radius * Math.sin(this.phi) * Math.sin(this.theta), this.target.y + this.radius * Math.cos(this.phi), this.target.z + this.radius * Math.sin(this.phi) * Math.cos(this.theta));
       this.camera.lookAt(this.target);
@@ -389,7 +394,7 @@ export class DesktopApp {
     renderer.setPixelRatio(1); renderer.setSize(360, 360, false); renderer.render(scene, camera);
     const blob = await new Promise<Blob>((resolve, reject) => renderer.domElement.toBlob((result) => result ? resolve(result) : reject(new Error('サムネイルを作成できませんでした。')), 'image/png'));
     renderer.setPixelRatio(previous); renderer.setSize(width, height); scene.clear();
-    if(parsed.scene)mesh.traverse(child=>{if(child instanceof Mesh){child.geometry.dispose();for(const material of Array.isArray(child.material)?child.material:[child.material])material.dispose();}});
+    if(parsed.scene)disposeModelScene(mesh);
     return blob;
   }
 
@@ -444,6 +449,7 @@ export class DesktopApp {
   }
 
   dispose(): void {
+    this.playback?.dispose();if(this.model&&this.parsed?.scene)disposeModelScene(this.model);
     this.disposed = true; cancelAnimationFrame(this.requestId); clearInterval(this.pollTimer); clearTimeout(this.toastTimer); this.resizeObserver.disconnect();
     for(const part of this.assemblyParts)part.mesh.geometry.dispose();
     for (const model of new Set(this.cache.values())) disposeParsed(model);
