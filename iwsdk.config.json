@@ -15,9 +15,9 @@
       "features": {
         "handTracking": true,
         "anchors": true,
-        "planeDetection": true,
-        "meshDetection": true,
-        "hitTest": true
+        "planeDetection": false,
+        "meshDetection": false,
+        "hitTest": false
       }
     },
     "input": {
@@ -40,8 +40,8 @@
         "useHandPinchForGrab": true
       },
       "physics": true,
-      "sceneUnderstanding": true,
-      "environmentRaycast": true,
+      "sceneUnderstanding": false,
+      "environmentRaycast": false,
       "spatialUI": {
         "kit": "horizon"
       }

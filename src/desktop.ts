@@ -11,7 +11,7 @@ import { ModelPlayback } from './playback';
 import { PhotoGallery } from './photos';
 import './styles.css';
 import type { AssemblyData } from '../shared/models';
-import { createAssembly, applyExplosion, assemblyRadius, type ExplodedPart } from './assembly';
+import { createAssembly, createSceneAssembly, disposeAssembly, applyExplosion, assemblyRadius, type ExplodedPart } from './assembly';
 
 const cubeIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><path d="m12 2 9 5v10l-9 5-9-5V7zM3 7l9 5 9-5M12 12v10M7.5 4.5l9 5"/></svg>`;
 const plusIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 5v14M5 12h14"/></svg>`;
@@ -258,16 +258,18 @@ export class DesktopApp {
     const previousParsed=this.parsed;this.parsed = parsed;
     this.playback?.dispose();this.playback=null;
     if (this.model) {this.group.remove(this.model);if(previousParsed?.scene)disposeModelScene(this.model);}
-    for(const part of this.assemblyParts)part.mesh.geometry.dispose();
+    disposeAssembly(this.assemblyParts);
     this.assemblyParts=[];this.explosion=0;
-    if(parsed.parts && parsed.parts.length>1){
+    if(parsed.scene){
+      this.model=cloneModelScene(parsed.scene);this.assemblyParts=createSceneAssembly(this.model);
+    }else if(parsed.parts && parsed.parts.length>1){
       const assembly=createAssembly(parsed,this.material);this.model=assembly.group;this.assemblyParts=assembly.parts;
-    }else this.model = parsed.scene ? cloneModelScene(parsed.scene) : new Mesh(parsed.geometry, this.material);
+    }else this.model = new Mesh(parsed.geometry, this.material);
     this.model.name = 'DesktopModel'; this.group.add(this.model);
     if(parsed.animations?.length)this.playback=new ModelPlayback(this.model);
     const explodeButton=this.host.querySelector('.explode-button') as HTMLButtonElement;
     explodeButton.disabled=this.assemblyParts.length<2;
-    explodeButton.title=explodeButton.disabled?'部品構成のあるSTEPで利用できます':'部品を離して表示する';
+    explodeButton.title=explodeButton.disabled?(this.model.userData.explosionReason??'部品構成のあるSTEP・GLBで利用できます'):'部品を離して表示する';
     explodeButton.setAttribute('aria-expanded','false');
     (this.host.querySelector('.explode-controls') as HTMLElement).hidden=true;
     this.host.classList.remove('explosion-open');
@@ -448,7 +450,7 @@ export class DesktopApp {
     ++this.selectionVersion;
     this.playback?.dispose(); this.playback = null;
     if (this.model) { this.group.remove(this.model); if (this.parsed?.scene) disposeModelScene(this.model); }
-    for (const part of this.assemblyParts) part.mesh.geometry.dispose();
+    disposeAssembly(this.assemblyParts);
     this.model = null; this.parsed = null; this.active = null; this.assemblyParts = []; this.explosion = 0;
     if (this.lines) { this.group.remove(this.lines); this.lines.geometry.dispose(); (this.lines.material as LineBasicMaterial).dispose(); this.lines = null; }
     this.dimensionPoints = []; if (this.shadow) this.shadow.visible = false;
@@ -519,7 +521,7 @@ export class DesktopApp {
     this.gallery.dispose();
     this.playback?.dispose();if(this.model&&this.parsed?.scene)disposeModelScene(this.model);
     this.disposed = true; cancelAnimationFrame(this.requestId); clearInterval(this.pollTimer); clearTimeout(this.toastTimer); this.resizeObserver.disconnect();
-    for(const part of this.assemblyParts)part.mesh.geometry.dispose();
+    disposeAssembly(this.assemblyParts);
     for (const model of new Set(this.cache.values())) disposeParsed(model);
     this.material.dispose(); this.lines?.geometry.dispose(); (this.lines?.material as LineBasicMaterial | undefined)?.dispose();
     if (this.shadow) { this.shadow.geometry.dispose(); const material = this.shadow.material as MeshBasicMaterial; material.map?.dispose(); material.dispose(); }

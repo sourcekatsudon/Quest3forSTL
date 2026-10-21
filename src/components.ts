@@ -10,6 +10,7 @@ export const RoomModel = createComponent('RoomModel', {
  partCount: { type: Types.Int32, default: 1 },
  explosionOpen: { type: Types.Boolean, default: false },
  gravity: { type: Types.Boolean, default: false },
+ fallVelocity: { type: Types.Float32, default: 0 },
  materialPreset: { type: Types.String, default: 'plastic' },
  tint: { type: Types.String, default: '#b4b9bc' },
  animationCount: { type: Types.Int32, default: 0 },
