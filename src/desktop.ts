@@ -34,6 +34,8 @@ export class DesktopApp {
   private status: HTMLElement;
   private toast: HTMLElement;
   private dialog: HTMLDialogElement;
+  private deleteDialog: HTMLDialogElement;
+  private deleteTarget: ModelRecord | null = null;
   private renderer: WebGLRenderer | null = null;
   private scene = new Scene();
   private camera = new PerspectiveCamera(36, 1, 0.0001, 10000);
@@ -71,6 +73,7 @@ export class DesktopApp {
   private immersive = false;
   private xrAvailable = false;
   private uploading = 0;
+  private deleting = new Set<string>();
   private connected = false;
   private disposed = false;
 
@@ -93,6 +96,13 @@ export class DesktopApp {
     this.status = this.host.querySelector('.save-status')!;
     this.toast = this.host.querySelector('.toast')!;
     this.dialog = this.host.querySelector('.share-dialog')!;
+    this.deleteDialog = document.createElement('dialog'); this.deleteDialog.className = 'delete-dialog'; this.deleteDialog.setAttribute('aria-label', 'モデルの削除確認');
+    this.deleteDialog.innerHTML = '<h2>モデルを削除しますか？</h2><p class="delete-model-name"></p><p class="delete-note">原本と関連ファイルも削除します。ほかの端末の共通ライブラリからも消えます。この操作は元に戻せません。</p><div class="delete-actions"><button type="button" class="delete-cancel">キャンセル</button><button type="button" class="delete-confirm">削除</button></div>';
+    this.host.append(this.deleteDialog);
+    this.deleteDialog.querySelector('.delete-cancel')!.addEventListener('click', () => this.deleteDialog.close());
+    this.deleteDialog.querySelector('.delete-confirm')!.addEventListener('click', () => { const target = this.deleteTarget; this.deleteDialog.close(); if (target) void this.performRemove(target); });
+    this.deleteDialog.addEventListener('close', () => { this.deleteTarget = null; });
+    this.deleteDialog.addEventListener('click', event => { if (event.target === this.deleteDialog) this.deleteDialog.close(); });
     this.labels = Array.from(this.host.querySelectorAll('.dimension-labels span'));
     this.host.querySelectorAll('.choose-button,.add-button').forEach((button) => button.addEventListener('click', () => this.fileInput.click()));
     this.fileInput.addEventListener('change', () => { const files = Array.from(this.fileInput.files ?? []); this.fileInput.value = ''; void this.openFiles(files); });
@@ -118,14 +128,14 @@ export class DesktopApp {
     this.host.addEventListener('dragover', (event) => { event.preventDefault(); if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'; });
     this.host.addEventListener('dragleave', (event) => { event.preventDefault(); if (--this.dragDepth <= 0) { this.dragDepth = 0; this.viewport.classList.remove('drag-over'); } });
     this.host.addEventListener('drop', (event) => { event.preventDefault(); this.dragDepth = 0; this.viewport.classList.remove('drag-over'); void this.openFiles(Array.from(event.dataTransfer?.files ?? [])); });
-    this.library.addEventListener('change', () => { this.connected = true; this.renderLibrary(); this.onLibraryChanged?.(this.library.models); });
+    this.library.addEventListener('change', () => { this.connected = true; this.reconcileLibrary(); this.renderLibrary(); this.onLibraryChanged?.(this.library.models); });
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(this.viewport);
     this.resizeObserver.observe(this.canvasHost);
     this.initRenderer();
     this.renderLibrary();
     void this.refresh().catch(() => { this.setStorageOffline(); });
-    this.pollTimer = window.setInterval(() => { if (!document.hidden && !this.uploading) void this.refresh().catch(() => this.setStorageOffline()); }, 12_000);
+    this.pollTimer = window.setInterval(() => { if (!document.hidden && !this.uploading && !this.deleting.size) void this.refresh().catch(() => this.setStorageOffline()); }, 12_000);
   }
 
   get current(): { record: ModelRecord; parsed: ParsedModel } | null { return this.active && this.parsed ? { record: this.active, parsed: this.parsed } : null; }
@@ -165,6 +175,7 @@ export class DesktopApp {
           parsed.parts=assembly.parts;
         }
         if (this.disposed) { disposeParsed(parsed); return; }
+        if (!record.id.startsWith('pending-') && !this.library.models.some(model => model.id === record.id)) { disposeParsed(parsed); return; }
         this.cache.set(record.id, parsed);
       }
       if (version !== this.selectionVersion) return;
@@ -345,6 +356,7 @@ export class DesktopApp {
   }
 
   async openFiles(files: File[]): Promise<void> {
+    if (this.deleting.size) { this.notify('削除が終わってからファイルを追加してください。'); return; }
     if (this.uploading) { this.notify('保存が終わってから次のファイルを追加してください。'); return; }
     for (const file of files) {
       if (!/\.(stl|step|stp|glb)$/i.test(file.name)) { this.notify('STL・STEP・GLBファイル（.stl / .step / .stp / .glb）を選んでください。'); continue; }
@@ -413,15 +425,66 @@ export class DesktopApp {
       const empty = document.createElement('div'); empty.className = 'library-empty'; empty.innerHTML = `<div>${cubeIcon}</div><p>まだモデルがありません</p><span>追加したモデルが<br>ここに並びます。</span>`; this.list.append(empty); return;
     }
     records.forEach((record, index) => {
-      const card = document.createElement('button'); card.type = 'button'; card.className = `model-card${record.id === this.active?.id ? ' selected' : ''}`; card.setAttribute('aria-pressed', String(record.id === this.active?.id));
+      const card = document.createElement('div'); card.className = `model-card${record.id === this.active?.id ? ' selected' : ''}`; card.dataset.id = record.id;
+      const open = document.createElement('button'); open.type = 'button'; open.className = 'model-card-open'; open.setAttribute('aria-pressed', String(record.id === this.active?.id)); open.setAttribute('aria-label', `${record.name}を表示`); open.disabled = this.deleting.has(record.id);
       const imageHost = document.createElement('div'); imageHost.className = 'model-card-image';
       if (record.thumbnailUrl) { const image = document.createElement('img'); image.src = record.thumbnailUrl; image.alt = ''; image.loading = 'lazy'; imageHost.append(image); } else imageHost.innerHTML = cubeIcon;
       const indexLabel = document.createElement('span'); indexLabel.className = 'card-index'; indexLabel.textContent = String(index + 1).padStart(2, '0'); imageHost.append(indexLabel);
       const info = document.createElement('div'); info.className = 'model-card-info';
       const name = document.createElement('span'); name.className = 'card-name'; name.textContent = record.name; name.title = record.name;
       const meta = document.createElement('span'); meta.className = 'card-meta'; meta.textContent = `${formatSize(record.size)}${record.optimization && record.optimization.size < record.size ? ` → ${formatSize(record.optimization.size)} · 軽量化済み` : record.id.startsWith('pending-') ? ' · 未保存' : record.format === 'step' ? ` · STEP · ${record.partCount??1} 部品` : record.format === 'glb' ? ' · GLB' : ' · STL'}`;
-      info.append(name, meta); card.append(imageHost, info); card.addEventListener('click', () => void this.show(record)); this.list.append(card);
+      info.append(name, meta); open.append(imageHost, info); open.addEventListener('click', () => void this.show(record)); card.append(open);
+      if (!record.id.startsWith('pending-')) {
+        const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'model-delete'; remove.title = 'ライブラリから削除'; remove.setAttribute('aria-label', `${record.name}を削除`); remove.disabled = this.deleting.has(record.id);
+        remove.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14M10 10v7m4-7v7"/></svg>';
+        if (remove.disabled) { remove.textContent = '…'; card.setAttribute('aria-busy', 'true'); }
+        remove.addEventListener('click', () => void this.removeModel(record)); card.append(remove);
+      }
+      this.list.append(card);
     });
+  }
+
+  private clearModel(): void {
+    ++this.selectionVersion;
+    this.playback?.dispose(); this.playback = null;
+    if (this.model) { this.group.remove(this.model); if (this.parsed?.scene) disposeModelScene(this.model); }
+    for (const part of this.assemblyParts) part.mesh.geometry.dispose();
+    this.model = null; this.parsed = null; this.active = null; this.assemblyParts = []; this.explosion = 0;
+    if (this.lines) { this.group.remove(this.lines); this.lines.geometry.dispose(); (this.lines.material as LineBasicMaterial).dispose(); this.lines = null; }
+    this.dimensionPoints = []; if (this.shadow) this.shadow.visible = false;
+    this.host.classList.remove('has-model', 'explosion-open');
+    for (const selector of ['.model-caption', '.mouse-hints', '.quest-access-guide', '.explode-controls']) (this.host.querySelector(selector) as HTMLElement).hidden = true;
+    this.host.querySelector('.model-title')!.textContent = ''; this.host.querySelector('.mode-text')!.textContent = 'STL VIEWER';
+    this.resize();
+  }
+
+  private reconcileLibrary(): void {
+    const present = new Set(this.library.models.map(model => model.id));
+    const removedActive = !!this.active && !this.active.id.startsWith('pending-') && !present.has(this.active.id);
+    if (removedActive) this.clearModel();
+    for (const [id, parsed] of this.cache) if (!id.startsWith('pending-') && !present.has(id)) {
+      this.cache.delete(id); if (parsed !== this.parsed && ![...this.cache.values()].includes(parsed)) disposeParsed(parsed);
+    }
+    if (removedActive) {
+      if (this.library.models[0]) void this.show(this.library.models[0]);
+      else this.status.textContent = 'モデルを置くだけで、自動保存。';
+    }
+  }
+
+  private removeModel(record: ModelRecord): void {
+    if (this.uploading) { this.notify('保存が終わってから削除してください。'); return; }
+    if (this.deleting.has(record.id)) return;
+    this.deleteTarget = record;
+    this.deleteDialog.querySelector('.delete-model-name')!.textContent = record.name;
+    if (!this.deleteDialog.open) this.deleteDialog.showModal();
+  }
+
+  private async performRemove(record: ModelRecord): Promise<void> {
+    if (this.deleting.has(record.id)) return;
+    this.deleting.add(record.id); this.renderLibrary();
+    try { await this.library.remove(record.id); this.notify(`「${record.name}」を削除しました。`); }
+    catch (error) { this.notify(error instanceof Error ? error.message : '削除できませんでした。接続を確認して再度お試しください。'); }
+    finally { this.deleting.delete(record.id); this.renderLibrary(); }
   }
 
   private trimCache(): void {

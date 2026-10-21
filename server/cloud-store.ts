@@ -1,13 +1,15 @@
-import { get, list, put } from '@vercel/blob';
+import { BlobPreconditionFailedError, del, get, list, put } from '@vercel/blob';
 import { Redis } from '@upstash/redis';
 import { createHash } from 'node:crypto';
 import { prepareModel } from './prepare-model.js';
 import type { LibraryResponse, ModelCommit, ModelRecord } from '../shared/models';
-import { ApiError, inspectStl, limits, MAX_THUMBNAIL_BYTES, validateName, validatePath, validatePng } from './validation.js';
+import { ApiError, idPattern, inspectStl, limits, MAX_THUMBNAIL_BYTES, validateName, validatePath, validatePng } from './validation.js';
+import { modelFiles } from './model-files.js';
 
 interface StoredModel extends ModelRecord { modelPathname: string; thumbnailPathname?: string; displayPathname?: string; assemblyPathname?: string }
 const PENDING = 'stl-room:v1:pending';
 const SLOT_PREFIX = 'library-slots/';
+const DELETED_PREFIX = 'model-deletions/';
 let client: Redis | undefined;
 const rates = new Map<string, { count: number; expires: number }>();
 function requireBlob() {
@@ -37,11 +39,21 @@ async function slotPaths(): Promise<string[]> {
 
 export async function cloudLibrary(): Promise<LibraryResponse> {
   const paths = await slotPaths();
+  const deleted = new Set<string>();
+  let cursor: string | undefined;
+  do {
+    const page = await list({ prefix: DELETED_PREFIX, cursor, limit: 1000 });
+    for (const blob of page.blobs) deleted.add(blob.pathname.slice(DELETED_PREFIX.length).replace(/\.json$/, ''));
+    cursor = page.hasMore ? page.cursor : undefined;
+  } while (cursor);
   const records: ModelRecord[] = [];
   // Bound simultaneous fetches even if the library limit is configured larger.
   for (let offset = 0; offset < paths.length; offset += 10) {
-    const batch = await Promise.all(paths.slice(offset, offset + 10).map(async (path) => publicRecord(await readManifest(path))));
-    records.push(...batch);
+    const batch = await Promise.all(paths.slice(offset, offset + 10).map(async path => {
+      const stored = await optionalManifest(path);
+      return stored && !deleted.has(stored.id) ? publicRecord(stored) : null;
+    }));
+    for (const model of batch) if (model) records.push(model);
   }
   const models = [...new Map(records.map((record) => [record.id, record])).values()];
   return { models: models.sort((a, b) => b.createdAt.localeCompare(a.createdAt)), storage: 'cloud', limits };
@@ -74,6 +86,7 @@ export function sameOrigin(request: Request) {
 export async function reserveModel(pathname: string) {
   const path = validatePath(pathname, pathname.toLowerCase().endsWith('.png') ? 'png' : 'model');
   const id = path.slice('uploads/'.length).replace(/\.[^.]+$/,'');
+  await assertNotDeleted(id);
   const count = (await slotPaths()).length;
   if (count >= limits.maxModels) throw new ApiError(409, 'モデルの保存上限に達しました。');
   const redis = optionalRedis();
@@ -113,11 +126,54 @@ async function readManifest(pathname: string): Promise<StoredModel> {
   return JSON.parse(new TextDecoder().decode(await blobBytes(pathname, 8192))) as StoredModel;
 }
 
+async function optionalManifest(pathname: string): Promise<StoredModel | null> {
+  try { return await readManifest(pathname); }
+  catch (error) { if (error instanceof ApiError && error.status === 404) return null; throw error; }
+}
+async function assertNotDeleted(id: string): Promise<void> {
+  requireBlob();
+  const deleted = await get(`${DELETED_PREFIX}${id}.json`, { access: 'private', useCache: false });
+  if (deleted?.statusCode === 200) { await deleted.stream.cancel(); throw new ApiError(410, 'このモデルはライブラリから削除されています。'); }
+}
+
+export async function deleteCloudModel(id: string): Promise<void> {
+  if (!idPattern.test(id)) throw new ApiError(400, 'モデルの指定が正しくありません。');
+  requireBlob();
+  const marker = `${DELETED_PREFIX}${id}.json`;
+  const stored = await optionalManifest(marker) ?? await optionalManifest(`models/${id}.json`);
+  if (!stored) return;
+  const files = modelFiles(stored);
+  try { await put(marker, JSON.stringify(stored), { access: 'private', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: false }); }
+  catch (error) { if (!await optionalManifest(marker)) throw error; }
+  // Preserve any file referenced by a different model. Slot versions make a
+  // retried/concurrent delete safe even after another upload reuses that slot.
+  const paths = await slotPaths(), slots: { path: string; etag: string }[] = [], retained = new Set<string>();
+  for (let offset = 0; offset < paths.length; offset += 10) {
+    await Promise.all(paths.slice(offset, offset + 10).map(async path => {
+      const result = await get(path, { access: 'private', useCache: false });
+      if (!result || result.statusCode !== 200) return;
+      const record = await new Response(result.stream).json() as StoredModel;
+      if (record.id === id) slots.push({ path, etag: result.blob.etag });
+      else for (const file of modelFiles(record)) retained.add(file);
+    }));
+  }
+  const unreferenced = files.filter(file => !retained.has(file));
+  if (unreferenced.length) await del(unreferenced);
+  await del(`models/${id}.json`);
+  for (const slot of slots) {
+    try { await del(slot.path, { ifMatch: slot.etag }); }
+    catch (error) { if (!(error instanceof BlobPreconditionFailedError)) throw error; }
+  }
+}
+
 export async function commitCloudModel(input: ModelCommit): Promise<ModelRecord> {
   const name = validateName(input.name);
   const modelPathname = validatePath(input.modelPathname, 'model');
   const thumbnailPathname = input.thumbnailPathname ? validatePath(input.thumbnailPathname, 'png') : undefined;
   const id = modelPathname.slice('uploads/'.length).replace(/\.[^.]+$/,'');
+  const thumbnailId = thumbnailPathname?.slice('uploads/'.length).replace(/\.[^.]+$/, '');
+  await assertNotDeleted(id);
+  if (thumbnailId && thumbnailId !== id) await assertNotDeleted(thumbnailId);
   const bytes = await blobBytes(modelPathname, limits.maxFileBytes);
   if (thumbnailPathname) validatePng(await blobBytes(thumbnailPathname, MAX_THUMBNAIL_BYTES));
   const {source:{dimensions,triangles},optimized,assembly,format}=await prepareModel(bytes,name);
@@ -159,12 +215,14 @@ export async function commitCloudModel(input: ModelCommit): Promise<ModelRecord>
   // A finite set of create-only Blob paths enforces the quota across Function instances.
   // Every commit scans slots in the same order, so retries for one ID converge on one slot.
   const occupied = new Set(await slotPaths());
+  await assertNotDeleted(id);
+  if (thumbnailId && thumbnailId !== id) await assertNotDeleted(thumbnailId);
   for (let slot = 0; slot < limits.maxModels; slot++) {
     const pathname = `${SLOT_PREFIX}${slot.toString().padStart(5, '0')}.json`;
     if (occupied.has(pathname)) {
-      const previous = await readManifest(pathname);
-      if (previous.id === id) return publicRecord(previous);
-      continue;
+      const previous = await optionalManifest(pathname);
+      if (previous?.id === id) return publicRecord(previous);
+      if (previous) continue;
     }
     try {
       await put(pathname, JSON.stringify(stored), options);
@@ -182,6 +240,7 @@ export async function commitCloudModel(input: ModelCommit): Promise<ModelRecord>
 }
 
 export async function cloudAsset(id: string, kind: 'model' | 'original' | 'thumbnail' | 'assembly'): Promise<Response> {
+  await assertNotDeleted(id);
   const record = await readManifest(`models/${id}.json`);
   const pathname = kind === 'assembly' ? record.assemblyPathname : kind === 'thumbnail' ? record.thumbnailPathname : kind === 'original' ? record.modelPathname : record.displayPathname ?? record.modelPathname;
   if (!pathname) throw new ApiError(404, 'ファイルが見つかりません。');

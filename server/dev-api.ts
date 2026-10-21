@@ -34,7 +34,7 @@ export function stlRoomApi(): Plugin {
             res.end(bytes);
             return;
           }
-          if (req.method !== 'POST') { res.setHeader('Allow', 'GET, POST'); throw new ApiError(405, 'この操作には対応していません。'); }
+          if (req.method !== 'POST' && !(req.method === 'DELETE' && url.pathname === '/api/models')) { res.setHeader('Allow', 'GET, POST, DELETE'); throw new ApiError(405, 'この操作には対応していません。'); }
           const origin = req.headers.origin;
           // HTTPS Vite negotiates HTTP/2, which supplies :authority instead of Host.
           const authority = req.headers.host || req.headers[':authority'];
@@ -52,6 +52,10 @@ export function stlRoomApi(): Plugin {
           const rate = rates.get(key) || { count: 0, expires: now + 60_000 };
           if (++rate.count > 30) throw new ApiError(429, '少し待ってからお試しください。');
           rates.set(key, rate);
+          if (req.method === 'DELETE') {
+            await store.remove(url.searchParams.get('id') || '');
+            res.statusCode = 204; res.end(); return;
+          }
           const maximum = url.pathname === '/api/photos' ? photoLimits.maxBytes : url.pathname === '/api/models' ? 4096 : url.searchParams.get('kind') === 'thumbnail' ? MAX_THUMBNAIL_BYTES : limits.maxFileBytes;
           if (Number(req.headers['content-length'] || 0) > maximum) throw new ApiError(413, 'ファイルの容量上限を超えています。');
           const chunks: Buffer[] = [];

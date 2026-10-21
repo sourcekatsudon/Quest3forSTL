@@ -7,6 +7,7 @@ export class ModelLibrary extends EventTarget {
   storage: 'local' | 'cloud' = 'local';
   limits = { maxFileBytes: 50 * 1024 * 1024, maxModels: 50 };
   private refreshing: Promise<ModelRecord[]> | null = null;
+  private removed = new Set<string>();
 
   refresh(): Promise<ModelRecord[]> {
     if (this.refreshing) return this.refreshing;
@@ -14,13 +15,21 @@ export class ModelLibrary extends EventTarget {
       const response = await fetch('/api/models', { cache: 'no-store' });
       if (!response.ok) throw new Error('ライブラリに接続できません。少し待ってお試しください。');
       const result = await response.json() as LibraryResponse;
-      this.models = result.models;
+      this.models = result.models.filter(model => !this.removed.has(model.id));
       this.storage = result.storage;
       this.limits = result.limits;
       this.dispatchEvent(new Event('change'));
       return this.models;
     })().finally(() => { this.refreshing = null; });
     return this.refreshing;
+  }
+
+  async remove(id: string): Promise<void> {
+    const response = await fetch(`/api/models?id=${encodeURIComponent(id)}`, { method: 'DELETE', signal: AbortSignal.timeout(45000) });
+    if (!response.ok) throw new Error(await apiError(response, '削除できませんでした。接続を確認して再度お試しください。'));
+    this.removed.add(id);
+    this.models = this.models.filter(model => model.id !== id);
+    this.dispatchEvent(new Event('change'));
   }
 
   async save(file: File, thumbnail?: Blob): Promise<ModelRecord> {
@@ -55,9 +64,9 @@ export class ModelLibrary extends EventTarget {
   }
 }
 
-async function apiError(response: Response): Promise<string> {
+async function apiError(response: Response, fallback = '保存できませんでした。接続を確認してお試しください。'): Promise<string> {
   try {
     const result = await response.json() as { error?: string; message?: string };
-    return result.message || result.error || '保存できませんでした。接続を確認してお試しください。';
-  } catch { return '保存できませんでした。接続を確認してお試しください。'; }
+    return result.message || result.error || fallback;
+  } catch { return fallback; }
 }

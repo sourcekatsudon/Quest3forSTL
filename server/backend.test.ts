@@ -1,13 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { access, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { LocalStore } from './local-store';
 import { ApiError, inspectStl, limits, validateName, validatePath, validatePng } from './validation';
 import { smallJson } from './http';
 import { GET as assetGet } from '../api/assets';
-import { GET as libraryGet } from '../api/models';
+import { DELETE as libraryDelete, GET as libraryGet } from '../api/models';
 import { rateLimit, sameOrigin } from './cloud-store';
 
 function binaryStl(): Uint8Array {
@@ -79,6 +79,33 @@ test('concurrent local commits enforce model quota atomically', async () => {
     assert.equal(commits.filter((commit) => commit.status === 'fulfilled').length, 2);
     assert.equal((await store.list()).length, 2);
   } finally { limits.maxModels = previousLimit; await rm(directory, { recursive: true, force: true }); }
+});
+
+test('model deletion preserves shared uploads and duplicate names, reclaims quota and is idempotent', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'stl-room-delete-'));
+  const previousLimit = limits.maxModels;
+  try {
+    limits.maxModels = 2;
+    const store = new LocalStore(directory), upload = await store.upload(binaryStl(), 'model', '同名.stl'), thumbnail = await store.upload(png, 'thumbnail', 'thumbnail.png');
+    const a = await store.commit({ name: '同名.stl', modelPathname: upload.pathname, thumbnailPathname: thumbnail.pathname });
+    const b = await store.commit({ name: '同名.stl', modelPathname: upload.pathname, thumbnailPathname: thumbnail.pathname });
+    await store.remove(a.id); await store.remove(a.id);
+    assert.deepEqual((await store.list()).map(model => model.id), [b.id]);
+    await assert.rejects(store.asset(a.id, 'model'));
+    assert.deepEqual(new Uint8Array(await store.asset(b.id, 'model')), binaryStl());
+    assert.deepEqual(new Uint8Array(await store.asset(b.id, 'thumbnail')), png);
+    const c = await store.commit({ name: '同名.stl', modelPathname: upload.pathname, thumbnailPathname: thumbnail.pathname });
+    await store.remove(b.id); await store.remove(c.id);
+    assert.equal((await new LocalStore(directory).list()).length, 0);
+    await assert.rejects(access(join(directory, upload.pathname)));
+    await assert.rejects(access(join(directory, thumbnail.pathname)));
+    await assert.rejects(store.remove('../models'), ApiError);
+  } finally { limits.maxModels = previousLimit; await rm(directory, { recursive: true, force: true }); }
+});
+
+test('deletion API rejects malformed IDs and foreign origins before touching storage', async () => {
+  assert.equal((await libraryDelete(new Request('https://example.test/api/models?id=../../secret', { method: 'DELETE' }))).status, 400);
+  assert.equal((await libraryDelete(new Request('https://example.test/api/models?id=12345678-1234-1234-1234-123456789abc', { method: 'DELETE', headers: { origin: 'https://foreign.test' } }))).status, 403);
 });
 
 test('metadata API body is bounded and rejects non-object JSON', async () => {

@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import {glbJson} from './glb';
 import { prepareModel, validateStep } from './prepare-model';
 import type { ModelCommit, ModelRecord } from '../shared/models';
-import { ApiError, inspectStl, limits, MAX_THUMBNAIL_BYTES, validateName, validatePath, validatePng } from './validation';
+import { ApiError, idPattern, inspectStl, limits, MAX_THUMBNAIL_BYTES, validateName, validatePath, validatePng } from './validation';
+import { modelFiles } from './model-files';
 
 interface StoredModel extends ModelRecord { modelPathname: string; thumbnailPathname?: string; displayPathname?: string; assemblyPathname?: string }
 
@@ -24,10 +25,12 @@ export class LocalStore {
     await this.initialize();
     const names = (await readdir(join(this.directory, 'models'))).filter((n) => n.endsWith('.json'));
     const models = await Promise.all(names.map(async (n) => {
-      const { modelPathname: _model, thumbnailPathname: _thumbnail, displayPathname: _display, assemblyPathname: _assembly, ...record } = JSON.parse(await readFile(join(this.directory, 'models', n), 'utf8')) as StoredModel;
-      return record;
+      try {
+        const { modelPathname: _model, thumbnailPathname: _thumbnail, displayPathname: _display, assemblyPathname: _assembly, ...record } = JSON.parse(await readFile(join(this.directory, 'models', n), 'utf8')) as StoredModel;
+        return record;
+      } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error; }
     }));
-    return models.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return models.filter((model): model is ModelRecord => model !== null).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   async upload(bytes: Uint8Array, kind: string, name: string): Promise<{ pathname: string }> {
@@ -79,6 +82,27 @@ export class LocalStore {
     if (!pathname) throw new ApiError(404, 'ファイルが見つかりません。');
     if (!/^(?:optimized\/[a-f0-9-]{36}\.stl|assemblies\/[a-f0-9-]{36}\.json)$/i.test(pathname)) validatePath(pathname, kind === 'thumbnail' ? 'png' : 'model');
     return this.readUpload(pathname, kind === 'thumbnail' ? MAX_THUMBNAIL_BYTES : limits.maxFileBytes);
+  }
+
+  async remove(id: string): Promise<void> {
+    if (!idPattern.test(id)) throw new ApiError(400, 'モデルの指定が正しくありません。');
+    const operation = this.writes.then(async () => {
+      await this.initialize();
+      const manifest = join(this.directory, 'models', `${id}.json`);
+      let stored: StoredModel;
+      try { stored = JSON.parse(await readFile(manifest, 'utf8')) as StoredModel; }
+      catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return; throw error; }
+      const retained = new Set<string>();
+      for (const name of await readdir(join(this.directory, 'models'))) {
+        if (!name.endsWith('.json') || name === `${id}.json`) continue;
+        const other = JSON.parse(await readFile(join(this.directory, 'models', name), 'utf8')) as StoredModel;
+        for (const path of modelFiles(other)) retained.add(path);
+      }
+      for (const path of modelFiles(stored)) if (!retained.has(path)) await rm(join(this.directory, path), { force: true });
+      await rm(manifest, { force: true });
+    });
+    this.writes = operation.catch(() => undefined);
+    return operation;
   }
 
   private async readUpload(pathname: string, maximum: number) {
