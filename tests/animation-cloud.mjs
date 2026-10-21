@@ -6,6 +6,7 @@ export default async function({context,workspaceRoot}){
  const bytes=await readFile(`${workspaceRoot}/tests/fixtures/animated.glb`),name=`browser-cloud-smoke-animation-${Date.now()}.glb`;
  try{
   await page.goto('https://stl-room-photors-projects.vercel.app/',{waitUntil:'networkidle'});
+  await page.locator('.storage-text').filter({hasText:'クラウドと同期'}).waitFor();
   await page.locator('.file-input').setInputFiles({name,mimeType:'model/gltf-binary',buffer:bytes});
   await page.locator('.model-title').filter({hasText:name.replace('.glb','')}).waitFor({timeout:60000});
   await page.locator('.save-status').filter({hasText:'クラウドに保存しました'}).waitFor({timeout:60000});
@@ -19,5 +20,8 @@ export default async function({context,workspaceRoot}){
   assert.notEqual(a,b,'saved GLB automatically animates after reloading production');assert.deepEqual(errors,[]);
   const result={passed:true,recordId:record.id,originalPreserved:true,autoplaysAfterReload:true,errors};
   await writeFile(`${workspaceRoot}/artifacts/animation-cloud-results.json`,JSON.stringify(result));return result;
+ }catch(error){
+  const state=await page.locator('.model-title,.save-status,.toast,.storage-text').allTextContents();
+  throw new Error(`${error.message}\nState: ${JSON.stringify(state)}\nErrors: ${JSON.stringify(errors)}`);
  }finally{await page.close();}
 }
