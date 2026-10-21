@@ -1,13 +1,15 @@
 import { Color, createSystem, Entity, Grabbed, Matrix4, PerspectiveCamera, SRGBColorSpace, UIKitMLAsset, Vector3, Vector4, VisibilityState, WebGLRenderTarget } from '@iwsdk/core';
 import { RoomPhotoCapture } from './components';
-import { FrameGesture, FrameShutter, type FrameHand } from './photo-gesture';
+import { FrameGesture, FrameShutter, PHOTO_COUNTDOWN_SECONDS, type FrameHand } from './photo-gesture';
 import { RoomSystem } from './room';
 import { uploadPhoto } from './photos';
+import { PhotoSound } from './photo-sound';
 const joints=['index-finger-phalanx-proximal','index-finger-tip','thumb-phalanx-proximal','thumb-tip'] as const;
 
 export class RoomPhotoSystem extends createSystem({held:{required:[Grabbed]}}){
  private state!:Entity;private panel!:UIKitMLAsset;private room!:RoomSystem;
  private gesture=new FrameGesture();private shutter=new FrameShutter();
+ private sounds=new PhotoSound();private countdown=0;
  private left:FrameHand={indexBase:new Vector3(),index:new Vector3(),thumbBase:new Vector3(),thumb:new Vector3()};
  private right:FrameHand={indexBase:new Vector3(),index:new Vector3(),thumbBase:new Vector3(),thumb:new Vector3()};
  private leftPoints=[this.left.indexBase,this.left.index,this.left.thumbBase,this.left.thumb];
@@ -19,14 +21,22 @@ export class RoomPhotoSystem extends createSystem({held:{required:[Grabbed]}}){
   this.room=this.world.getSystem(RoomSystem)!;this.state=this.world.requireSceneEntity('RoomControls');this.state.addComponent(RoomPhotoCapture);
   this.panel=this.world.requireSceneObject<UIKitMLAsset>('RoomControls');
   const button=this.panel.requireElementById('Photo');button.name='Photo';
-  const click=()=>{if(this.busy)return;if(this.pending){void this.save();return;}this.enabled=!this.enabled;this.shutter.reset();this.state.setValue(RoomPhotoCapture,'stage',this.enabled?'ready':'off');this.feedback();};
+  const click=()=>{this.unlockAudio();if(this.busy)return;if(this.pending){void this.save();return;}this.enabled=!this.enabled;this.shutter.reset();this.setCountdown(0);this.sounds.cancel();this.state.setValue(RoomPhotoCapture,'stage',this.enabled?'ready':'off');this.feedback();};
   button.addEventListener('click',click);this.cleanupFuncs.push(()=>button.removeEventListener('click',click));
-  this.cleanupFuncs.push(this.world.visibilityState.subscribe(value=>{if(value!==VisibilityState.Visible){this.shutter.reset();this.state.setValue(RoomPhotoCapture,'progress',0);if(!this.busy&&!this.pending)this.state.setValue(RoomPhotoCapture,'stage',this.enabled?'ready':'off');this.feedback();}}));
+  this.cleanupFuncs.push(this.world.visibilityState.subscribe(value=>{if(value!==VisibilityState.Visible){this.shutter.reset();this.setCountdown(0);this.sounds.cancel();this.state.setValue(RoomPhotoCapture,'progress',0);if(!this.busy&&!this.pending)this.state.setValue(RoomPhotoCapture,'stage',this.enabled?'ready':'off');this.feedback();}}));
+  this.cleanupFuncs.push(()=>this.sounds.dispose());
   this.feedback();
  }
+ // Called synchronously from the browser's XR launch click to unlock audio.
+ unlockAudio(){this.sounds.unlock();}
+ private setCountdown(value:number){
+  if(value===this.countdown)return;
+  this.countdown=value;this.state.setValue(RoomPhotoCapture,'countdown',value);
+  if(value)this.sounds.countdown(value);
+ }
  private feedback(){
-  const stage=this.state.getValue(RoomPhotoCapture,'stage'),p=this.state.getValue(RoomPhotoCapture,'progress')??0;
-  const text=stage==='error'?(this.pending?'保存失敗 / 押して再保存':'撮影失敗 / もう一度四角'):stage==='saving'?'写真を保存中…':stage==='saved'?'写真を保存しました':stage==='holding'?`撮影まで ${Math.max(1,Math.ceil((1-p)*1.2))}秒`:this.enabled?'写真 ON / 両手で四角':'写真ジェスチャ OFF';
+  const stage=this.state.getValue(RoomPhotoCapture,'stage'),countdown=this.state.getValue(RoomPhotoCapture,'countdown');
+  const text=stage==='error'?(this.pending?'保存失敗 / 押して再保存':'撮影失敗 / もう一度四角'):stage==='saving'?'写真を保存中…':stage==='saved'?'写真を保存しました':stage==='holding'?`撮影まで ${countdown}秒`:this.enabled?'写真 ON / 両手で四角':'写真ジェスチャ OFF';
   if(this.lastLabel!==text){this.room.setControlLabel('PhotoLabel',text);this.lastLabel=text;}
   if(this.lastStage!==stage){this.panel.getElementById('Photo')?.setProperties({backgroundColor:stage==='error'?'#ffd1d1':stage==='saved'?'#a7e4c7':stage==='holding'||stage==='saving'?'#ffe398':'#e5f2f4'});this.lastStage=stage??'';}
  }
@@ -47,6 +57,8 @@ export class RoomPhotoSystem extends createSystem({held:{required:[Grabbed]}}){
   this.player.head.updateWorldMatrix(true,false);this.inverse.copy(this.player.head.matrixWorld).invert();
   const valid=this.enabled&&!this.pending&&this.queries.held.entities.size===0&&this.read('left')&&this.read('right')&&this.gesture.matches(this.left,this.right);
   const fire=this.shutter.update(valid,delta);this.state.setValue(RoomPhotoCapture,'progress',this.shutter.progress);
+  if(!valid&&this.countdown>0)this.sounds.cancel();
+  this.setCountdown(this.shutter.progress>0?Math.max(1,Math.ceil((1-this.shutter.progress)*PHOTO_COUNTDOWN_SECONDS)):0);
   if(fire){void this.capture();return;}
   if(this.pending)return;
   const stage=this.shutter.progress>0?'holding':performance.now()<this.statusUntil?(this.state.getValue(RoomPhotoCapture,'stage')??'ready'):this.enabled?'ready':'off';
@@ -71,6 +83,7 @@ export class RoomPhotoSystem extends createSystem({held:{required:[Grabbed]}}){
    try{
     renderer.xr.enabled=false;renderer.autoClear=true;this.world.scene.background=this.background;
     renderer.setRenderTarget(target);renderer.render(this.world.scene,this.snapshotCamera);renderer.readRenderTargetPixels(target,0,0,width,height,bytes);
+    this.sounds.shutter();
    }finally{renderer.setRenderTarget(previousTarget);renderer.setViewport(viewport);renderer.setScissor(scissor);renderer.setScissorTest(scissorTest);renderer.xr.enabled=xrEnabled;renderer.autoClear=previousAutoClear;this.world.scene.background=previousBackground;target.dispose();}
    const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d');if(!ctx)throw new Error('写真を生成できませんでした。');
    const image=ctx.createImageData(width,height),row=width*4;

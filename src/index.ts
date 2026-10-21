@@ -21,6 +21,7 @@ async function initialize(){
   world.registerSystem(RoomPhotoSystem);
   const room=world.getSystem(RoomSystem)!;
   desktop.onXRRequest=()=>{
+   world.getSystem(RoomPhotoSystem)?.unlockAudio();
    world.renderer.xr.setReferenceSpaceType('local-floor');
    world.launchXR();
    window.setTimeout(()=>{

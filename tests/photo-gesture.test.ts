@@ -24,8 +24,14 @@ describe('photo frame gesture',()=>{
   shutter.update(false,.05);
   for(let i=0;i<100;i++)photos+=Number(shutter.update(true,.05));expect(photos).toBe(1);
   for(let i=0;i<9;i++)shutter.update(false,.05);
-  for(let i=0;i<26;i++)photos+=Number(shutter.update(true,.05));expect(photos).toBe(2);
-  shutter.reset();for(let i=0;i<30;i++)photos+=Number(shutter.update(true,.05));expect(photos).toBe(2);
+  for(let i=0;i<60;i++)photos+=Number(shutter.update(true,.05));expect(photos).toBe(2);
+  shutter.reset();for(let i=0;i<80;i++)photos+=Number(shutter.update(true,.05));expect(photos).toBe(2);
+ });
+ it('waits three full seconds for the audible 3, 2, 1 countdown',()=>{
+  const shutter=new FrameShutter();
+  for(let i=0;i<29;i++)expect(shutter.update(true,.1)).toBe(false);
+  expect(shutter.update(true,.1)).toBe(true);
+  for(let i=0;i<40;i++)expect(shutter.update(true,.1)).toBe(false);
  });
 });
 

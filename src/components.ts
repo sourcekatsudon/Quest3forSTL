@@ -36,6 +36,7 @@ export const RoomDimension = createComponent('RoomDimension', {
 export const RoomPhotoCapture = createComponent('RoomPhotoCapture', {
  stage: { type: Types.String, default: 'ready' },
  progress: { type: Types.Float32, default: 0 },
+ countdown: { type: Types.Int8, default: 0 },
  photoId: { type: Types.String, default: '' },
 });
 export default defineComponents([RoomModel, RoomInputVisuals, RoomMeasurementMode, RoomDimension, RoomPhotoCapture]);

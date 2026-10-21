@@ -1,5 +1,7 @@
 import { Vector3 } from '@iwsdk/core';
 
+export const PHOTO_COUNTDOWN_SECONDS=3;
+
 /** Points are expressed in the viewer's local space, in metres. */
 export interface FrameHand { indexBase: Vector3; index: Vector3; thumbBase: Vector3; thumb: Vector3 }
 export class FrameGesture {
@@ -30,8 +32,8 @@ export class FrameShutter {
   const dt=Math.max(0,Math.min(delta,.1));
   if(!valid){this.progress=0;this.released+=dt;if(this.released>=.4)this.latched=false;return false;}
   this.released=0;if(this.latched)return false;
-  this.progress=Math.min(1,this.progress+dt/1.2);
-  if(this.progress<1)return false;
+  this.progress=Math.min(1,this.progress+dt/PHOTO_COUNTDOWN_SECONDS);
+  if(this.progress<1-1e-9)return false;
   this.latched=true;this.progress=0;return true;
  }
  reset(){this.progress=0;this.released=0;this.latched=true;}
