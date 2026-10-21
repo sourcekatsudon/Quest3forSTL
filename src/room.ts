@@ -141,14 +141,14 @@ export class RoomSystem extends createSystem({
  }
  private renderStaticLabels(){
   if(!this.selected)this.text('Selection','Quest3でSTLファイルを立体で見るアプリ');
-  this.text('ResetLabel','位置・大きさを戻す');this.text('ActualSizeLabel','実寸にする');
+  this.text('ResetLabel','リセット');this.text('ActualSizeLabel','実寸にする');
   this.text('DeleteLabel','選択したモデルを消す');this.text('RecallLabel','操作画面を手元に呼ぶ');
   this.setLabel(this.libraryPanel,'DragHint','サムネイルをドラッグして追加');
   for(const [id,label] of [['MaterialTitle','表面の質感・色'],['GlassLabel','ガラス'],['AluminumLabel','アルミ'],['SUSLabel','SUS'],['PlasticLabel','プラスチック']])this.setLabel(this.materialsPanel,id,label);
   this.renderGravity();
   this.setLabel(this.materialsPanel,'AnimationPlayLabel','再生');this.setLabel(this.materialsPanel,'AnimationStopLabel','停止');
   this.renderPlayback();
-  for(const [id,label] of [['LibraryTitle','モデルライブラリ'],['AddLabel','追加'],['PreviousLabel','前のモデル'],['NextLabel','次のモデル']]){
+  for(const [id,label] of [['LibraryTitle','モデルライブラリ'],['AddLabel','追加'],['PreviousLabel','◀ 前'],['NextLabel','後ろ ▶']]){
    this.setLabel(this.libraryPanel,id,label);
   }
  }
