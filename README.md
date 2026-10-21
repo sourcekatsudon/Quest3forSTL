@@ -1,0 +1,124 @@
+# Quest3でSTLファイルを立体で見るアプリ
+
+公開URL: https://stl-room-photors-projects.vercel.app/
+
+「3Dモデルを、目の前に。」PCとMeta Quest 3で共通のSTLライブラリを使う、日本語のWebビューアです。公式IWSDK 1.0.1のMixed Realityスターターをベースにしています。
+
+## 起動
+
+Node.js 22.12以降（22系）または24以降を使用してください。
+
+```powershell
+npm ci
+npm run dev
+```
+
+`https://localhost:8081/` が開きます。ローカルの自己署名証明書の警告を許可してください。開発時のファイルはサーバー側の `.stl-room-data/` に永続保存され、同じ開発サーバーのURLを開いた端末から共有できます。localStorageにはモデルを保存しません。クラウドと開発時ディスク保存は画面に区別して表示します。
+
+同じWi-FiのQuestからアクセスするURLは `npx @iwsdk/cli dev status` の `runtimeUrls.network` で確認できます。正式利用にはHTTPSの公開URLを使ってください。
+
+## 使い方
+
+- PC: STL・STEP・GLB（.stl / .step / .stp / .glb）をドロップ、またはファイルを選択。STLはローカル表示後に保存が並行して進み、STEPはサーバーで変換してから表示します。
+- STEP: 複数部品があれば「爆発図」ボタンを押し、分離量を0〜100%で調整できます。0%またはボタンを閉じると元の配置に戻ります。PC・Quest共通の表示用の放射状分離で、CADの拘束・組立手順を再現する機能ではありません。STLや単一部品では利用できません。Questでは左パネルの「爆発図」を選び、レーザーまたは指でスライダーを操作します。つかむ・拡大縮小はアセンブリ全体に作用し、爆発図の変更時は全体の表示範囲を保って当たり判定を更新します。リセットすると組立状態に戻ります。
+- 左ドラッグで回転、ホイールでズーム、右ドラッグで移動。操作終了から約3秒後に自動回転が戻ります。
+- 「Questで開く」からMeta Web Launch、QR、URLコピーを利用できます。QRはスマートフォン等向けです。
+- Quest: 同じURLを開き「ブラウザで表示」。最新の保存済みモデルを視線の約60cm前方に配置します。追加時は扱いやすい大きさになり、「実寸にする」と両手操作で部屋いっぱいの大きさにできます。
+- MR: ピンチでつかみ、両手で拡大・回転。初期状態は重力OFFで、放すとその場に保持されます。左パネルの「重力 ON/OFF」は選択したオブジェクトに作用します。
+- 手での操作を基本とし、追跡中は手の関節に半透明のゴーストを重ねます。前腕は手首の向きから25cm分を推定し、肘側をフェードします。肘・上腕の実測ではありません。Questがコントローラーを入力に選ぶと、その側はコントローラー表示へ自動で切り替わります。手の追跡が失われたときはゴーストを隠します。端末側でハンドトラッキングと自動切り替えを有効にしてください。
+- 右のサムネイルグリッドで選択し「追加」、またはサムネイルをドラッグして離します。同一モデルも複数追加でき、最大8インスタンス、合計100万三角形までです。ページ送りで全モデルへアクセスできます。
+- 左の追従パネルでリセット、実寸への復帰、選択インスタンスの削除。クラウドの原本は残ります。
+
+STLの元データを **X=幅、Y=奥行、Z=高さ、単位mm** として測定し、STEPはファイル内の単位をmmに変換して、表示用にZ-upからY-upへ変換します。MRでは1mmを0.001mに変換します。極端な大きさは安全な表示倍率へ調整し、倍率を表示します。
+
+新しく保存したモデルは、サーバーで表示用データを自動生成します。10万三角形を目標に軽量化し、PC・Questの両方で使用します。原本は変更せず、原寸の表示も維持します。推定誤差の上限は0.25mmとモデル最大辺の0.3%の小さい方で、開いた境界や折れ目を保護するため、形状によっては10万面まで減らない場合があります。失敗時は原本を表示します。この誤差は簡略化アルゴリズムの推定値で、製造精度の保証ではありません。既存の保存済みモデルは再アップロードすると適用されます。
+
+STEPはOpenCascade（[occt-import-js](https://github.com/kovacsv/occt-import-js)、LGPL-2.1）で変換します。部品の形状・元の配置・取得できた階層を保持し、部品ごとに軽量化します。表示用STLと部品構成JSONを配信するため、Quest側にSTEP変換処理は不要です。STEPの上限は50MiB、1000部品、変換後100万三角形です。外部参照は1ファイルに含めて書き出してください。元ファイルはそのまま保持します。
+
+選択したモデルの上に小さな材質パネルが出ます。ガラス・アルミ・SUS・プラスチックと8色から選択できます。反射は室内風の環境画像で近似し、ガラスは透過表示します。実際の部屋のカメラ映像を反射に使う機能はありません。これらの設定・重力は現在の空間の各インスタンスに適用されます。
+
+GLB（.glb）は埋め込み画像・元の材質を保持して読み込み、ファイルのメートル単位をmm表示へ換算します。静止表示で、アニメーションは初期姿勢にします。外部画像参照・KTX2画像・GPU instancing は通常メッシュと埋め込みPNG/JPEGに変換してください。原本をそのまま配信するため、GLBはSTLの自動10万面簡略化の対象ではなく、上限100万三角形です。
+
+部屋の利用範囲は床基準の追跡で扱い、「操作画面を手元に呼ぶ」でパネルを呼び戻せます。アプリに着席専用の領域はありません。Quest本体の境界設定や、追跡できる実際の広さは端末側の設定に従います。
+
+スキャン済みの部屋のメッシュに固定の衝突形状を付け、床・机の平面と併用します。つかみ中の移動と高速落下では、認識した机の上面を越えない補正も行います。机を含むスペース設定と空間データへの権限が必要です。実機での認識精度・机への接触は未検証です。
+
+## Vercelで公開
+
+```powershell
+npx vercel link
+npx vercel blob create-store stl-room-models --access private --region hnd1 --yes
+npx vercel env pull .env.local
+npm run typecheck
+npm test
+npm run build
+npx vercel --prod
+```
+
+Vercelプロジェクトに **Private Blob** を接続して `BLOB_READ_WRITE_TOKEN` を設定してください。トークンはサーバー専用です。`VITE_` という名前を付けず、ブラウザのコードに入れないでください。APIはVercel Functions、STLとサムネイル・メタデータはPrivate Blobを使います。50MBのファイルはFunctionsを経由せず直接Blobにアップロードします。非公開のダウンロードはFunctionsからストリーミングします。
+
+認証不要の利用に合わせてVercel Deployment Protectionを設定してください。サービスに会員登録機能はありません。
+
+| 環境変数 | 初期値・用途 |
+|---|---|
+| `BLOB_READ_WRITE_TOKEN` | クラウドの必須設定 |
+| `STL_MAX_FILE_BYTES` | 52428800（50MiB） |
+| `STL_MAX_MODELS` | 100 |
+| `STL_LOCAL_DIR` | 開発時の保存先。省略時 `.stl-room-data/` |
+| `STL_DISPLAY_TRIANGLES` | 表示用の目標三角形数。100000 |
+| `STL_DISPLAY_MAX_ERROR_MM` | 簡略化の推定誤差上限。0.25mm |
+| `STL_DISPLAY_RELATIVE_ERROR` | 最大辺に対する推定誤差上限。0.003 |
+| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | 任意。端末IPごとの回数制限を全Functionsで共有 |
+
+RedisなしでもBlobでモデル個数制限を共有します。簡易レート制限はIPごとに1分30書き込みで、RedisなしではFunctionインスタンス単位です。公開APIを悪意ある大量アクセスから完全に保護するものではありません。詳細は [保存処理の説明](server/STORAGE.md) を参照してください。
+
+**ログインがないため、サービスURLを知る第三者はライブラリを閲覧し、モデルを追加できます。Private Blobは原本の直接アクセスを保護しますが、公開アプリの匿名APIを利用者ごとには制限しません。** 失敗・中断した直接アップロードの未参照ファイルは管理者が定期的に整理してください。
+
+## 検証
+
+```powershell
+npm run typecheck
+npm test
+npm run build
+npx @iwsdk/cli dev up --open --allow-browser-automation
+npm run test:e2e
+```
+
+STLの解析はWorkerで行い、ASCII・バイナリに対応します。100万三角形を超えるモデルは簡略化を案内して拒否します。MRの動的コライダーは軽量なバウンディングボックス近似で、凹部を正確には再現しません。IWSDKのHavok連携を使用し、拡大縮小時には形状を再作成します。
+
+床・机はWebXRの水平面検出を利用し、利用できない場合はEnvironment Raycastの測定点付近の小さな衝突面、最後に仮想床へフォールバックします。平面の外接矩形による近似です。部屋のスキャン・権限・ブラウザ対応が必要です。手指で押す衝突や現実物体による深度遮蔽は実装していません。
+
+Quest 3実機での手のつかみ心地、パススルー品質、実際の机・床の精度、Web Launchによる実機への転送は実機確認が必要です。IWERの検証結果は実機動作の保証ではありません。
+
+## 主要ファイル
+
+- `src/desktop.ts` / `src/styles.css`: PC画面・3Dプレビュー・サムネイル
+- `src/model.ts` / `src/stl-parser.ts` / `src/stl-worker.ts`: PC・MR共通の解析と座標変換
+- `src/room.ts`: MRインスタンス、つかみ、物理、安全復帰
+- `public/ui/`: IWSDKの空間UI
+- `api/` / `server/`: 保存・一覧・非公開ファイル配信
+- `shared/models.ts`: APIとクライアントの共通型
+
+公式資料: [IWSDK](https://iwsdk.dev/)、[開発スキル](https://github.com/facebook/immersive-web-sdk/blob/main/docs/public/skill.md)、[空間UIの配置](https://iwsdk.dev/concepts/spatial-ui/hud.html)、[Meta Web Launch](https://developers.meta.com/vr/documentation/web/web-launch/)、[Vercel Private Blob](https://vercel.com/docs/vercel-blob/using-blob-sdk#private-blobs)。
+
+空間UIの日本語ラベルは、ブラウザの文字描画をPNGテクスチャとして使用します。UIKitの標準フォントに日本語の字形がないためです。動的なファイル名にも対応します。Noto Sans JPはSIL Open Font License 1.1で配布されています。ライセンスは `public/ui/fonts/OFL.txt` に同梱しています。
+
+
+## 動作確認結果（2026-10-21）
+
+| 検証 | 結果 |
+|---|---|
+| TypeScript / production build | 成功 |
+| STL解析・保存API・軽量化・STEPの自動テスト | 27件成功 |
+| STEPアセンブリ | 18部品の実STEPで公開環境の変換・原本保持・PCスライダーを確認。Questエミュレーターで分離・つかみ移動・リセットの9項目成功 |
+| サーバー軽量化 | 検証用球モデルで29,940,084バイト・598,800面から5,000,084バイト・100,000面へ削減。寸法・原本SHA一致を確認 |
+| PCのPlaywright実操作 | 6シナリオ成功。ドロップ、寸法、回転・ズーム・平行移動、自動回転再開、モデル切り替え、再読込、共有、エラー、モバイル |
+| IWERのMR操作 | 19項目成功。ピンチ移動、両手拡大・回転、コライダー追従、重力・安全床、リセット、選択削除、複数追加、8個上限、終了時解放 |
+| 公開Vercel API / Private Blob | 5,000,084バイトの直接保存とストリーミング配信、SHA一致、サムネイル、再取得、重複コミット、別Origin拒否を確認 |
+| 公開先の実ブラウザ | 実際のクライアントアップロード、クラウド保存、サムネイル、再読込後の復元、デスクトップへのフォールバックを確認 |
+| Quest 3実機 | 未検証。パススルー、実際の部屋と手の追跡、Web Launchでの実機転送は端末で確認が必要 |
+
+XRの再実行は、開発ブラウザでSTLを保存した状態で `powershell -ExecutionPolicy Bypass -File tests/xr-smoke.ps1`。結果は `artifacts/xr-results.json`、公開APIの試験は `npx tsx tests/deployment-api-smoke.mts <HTTPS URL>` で、作成した試験データだけを後始末します。`artifacts/` はローカルの検証記録としてGit管理外です。
+
+
+

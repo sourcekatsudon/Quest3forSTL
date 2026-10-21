@@ -1,0 +1,134 @@
+{
+  "version": "iwsdk.scene.v1",
+  "units": "meters",
+  "components": {
+    "com.iwsdk.components.IBLGradient": {
+      "sky": [
+        0.9,
+        0.94,
+        0.96,
+        1
+      ],
+      "equator": [
+        0.6,
+        0.65,
+        0.68,
+        1
+      ],
+      "ground": [
+        0.35,
+        0.36,
+        0.37,
+        1
+      ],
+      "intensity": 1
+    }
+  },
+  "resources": {},
+  "nodes": [
+    {
+      "id": "RoomControls",
+      "name": "RoomControls",
+      "content": {
+        "type": "asset",
+        "asset": "room-controls"
+      },
+      "transform": {
+        "position": [
+          -0.65,
+          1.35,
+          -1
+        ],
+        "rotationDeg": [
+          0,
+          30,
+          0
+        ]
+      },
+      "components": {
+        "RayInteractable": {}
+      }
+    },
+    {
+      "id": "RoomLibrary",
+      "name": "RoomLibrary",
+      "content": {
+        "type": "asset",
+        "asset": "room-library"
+      },
+      "transform": {
+        "position": [
+          0.6,
+          1.56,
+          -1.2
+        ],
+        "rotationDeg": [
+          0,
+          -26.565,
+          0
+        ]
+      },
+      "components": {
+        "RayInteractable": {}
+      }
+    },
+    {
+      "id": "FillLight",
+      "components": {
+        "AmbientLight": {
+          "color": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "intensity": 1.4
+        }
+      }
+    },
+    {
+      "id": "KeyLight",
+      "transform": {
+        "position": [
+          -2,
+          4,
+          1
+        ],
+        "rotationDeg": [
+          -45,
+          -30,
+          0
+        ]
+      },
+      "components": {
+        "DirectionalLight": {
+          "color": [
+            1,
+            0.98,
+            0.95,
+            1
+          ],
+          "intensity": 2.5
+        }
+      }
+    },
+    {
+      "id": "RoomMaterials",
+      "name": "RoomMaterials",
+      "content": {
+        "type": "asset",
+        "asset": "room-materials"
+      },
+      "transform": {
+        "position": [
+          0.4,
+          1.4,
+          -0.65
+        ]
+      },
+      "components": {
+        "RayInteractable": {}
+      }
+    }
+  ]
+}

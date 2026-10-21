@@ -1,0 +1,13 @@
+node_modules
+.reference
+.agents
+.claude
+.codex
+.cursor
+.iwsdk
+.stl-room-data
+artifacts
+test-results
+playwright-report
+.env*
+!/.env.example

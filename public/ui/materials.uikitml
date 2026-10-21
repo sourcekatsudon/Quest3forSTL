@@ -1,0 +1,14 @@
+<style>
+.root{width:32;padding-top:1.5;padding-bottom:1.5;padding-left:1.5;padding-right:1.5;flex-direction:column;gap:1;background-color:#f8fafb;border-radius:1.2;}
+.row{flex-direction:row;gap:1;}
+.btn{width:14;height:5;background-color:#e5f2f4;justify-content:center;align-items:center;border-radius:.7;}
+.label{width:14;height:2.5;}
+.color{width:6.5;height:4;border-radius:.7;}
+</style>
+<div class="root">
+<img id="MaterialTitle" src="/ui/labels/title.png" style="width:29;height:2.5" />
+<div class="row"><button id="Glass" class="btn"><img id="GlassLabel" class="label" src="/ui/labels/title.png" /></button><button id="Aluminum" class="btn"><img id="AluminumLabel" class="label" src="/ui/labels/title.png" /></button></div>
+<div class="row"><button id="SUS" class="btn"><img id="SUSLabel" class="label" src="/ui/labels/title.png" /></button><button id="Plastic" class="btn"><img id="PlasticLabel" class="label" src="/ui/labels/title.png" /></button></div>
+<div class="row"><button id="Color0" class="color" style="background-color:#e9ecef" /><button id="Color1" class="color" style="background-color:#343a40" /><button id="Color2" class="color" style="background-color:#c84646" /><button id="Color3" class="color" style="background-color:#327dc4" /></div>
+<div class="row"><button id="Color4" class="color" style="background-color:#d6ad44" /><button id="Color5" class="color" style="background-color:#529a70" /><button id="Color6" class="color" style="background-color:#9964b2" /><button id="Color7" class="color" style="background-color:#e48b47" /></div>
+</div>

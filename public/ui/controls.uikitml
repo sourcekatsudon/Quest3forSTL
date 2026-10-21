@@ -1,0 +1,22 @@
+<style>
+.root { width: 42; padding-top: 2; padding-bottom: 2; padding-left: 2; padding-right: 2; flex-direction: column; gap: 1.5; background-color: #f8fafb; border-radius: 1.5; }
+.btn { height: 7; width: 38; background-color: #e5f2f4; justify-content: center; align-items: center; border-radius: 1; }
+.label { width: 38; height: 3; }
+</style>
+<div class="root">
+<img id="Selection" class="label" src="/ui/labels/title.png" />
+<button id="Reset" class="btn"><img id="ResetLabel" class="label" src="/ui/labels/reset.png" /></button>
+<button id="ActualSize" class="btn"><img id="ActualSizeLabel" class="label" src="/ui/labels/actual.png" /></button>
+<button id="Delete" class="btn"><img id="DeleteLabel" class="label" src="/ui/labels/delete.png" /></button>
+<button id="Gravity" class="btn"><img id="GravityLabel" class="label" src="/ui/labels/title.png" /></button>
+<button id="Recall" class="btn"><img id="RecallLabel" class="label" src="/ui/labels/title.png" /></button>
+<button id="Explode" class="btn"><img id="ExplodeLabel" class="label" src="/ui/labels/title.png" /></button>
+<div id="ExplosionControls" style="display: none; flex-direction: column; gap: 1;">
+<img id="ExplosionValue" class="label" src="/ui/labels/scale.png" />
+<Slider id="ExplosionSlider" min="0" max="100" step="1" value="0" size="sm" width="38" />
+</div>
+<img id="Scale" class="label" src="/ui/labels/scale.png" />
+<img id="Surface" class="label" src="/ui/labels/surface.png" />
+</div>
+
+

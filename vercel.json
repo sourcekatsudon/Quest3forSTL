@@ -1,0 +1,33 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "framework": "vite",
+  "regions": [
+    "hnd1"
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "same-origin"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "xr-spatial-tracking=(self), camera=(), microphone=()"
+        }
+      ]
+    }
+  ],
+  "functions": {
+    "api/models.ts": {
+      "includeFiles": "node_modules/{occt-import-js,draco3dgltf}/**/*.wasm",
+      "maxDuration": 60
+    }
+  }
+}

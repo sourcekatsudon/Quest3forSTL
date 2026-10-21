@@ -1,0 +1,20 @@
+import { createComponent, defineComponents, Types } from '@iwsdk/core';
+export const RoomModel = createComponent('RoomModel', {
+ assetId: { type: Types.String, default: '' },
+ homePosition: { type: Types.Vec3, default: [0,1.2,-1.15] },
+ homeScale: { type: Types.Float32, default: 1 },
+ colliderScale: { type: Types.Float32, default: 1 },
+ extents: { type: Types.Vec3, default: [.1,.1,.1] },
+ triangles: { type: Types.Int32, default: 0 },
+ explosion: { type: Types.Float32, default: 0 },
+ partCount: { type: Types.Int32, default: 1 },
+ explosionOpen: { type: Types.Boolean, default: false },
+ gravity: { type: Types.Boolean, default: false },
+ materialPreset: { type: Types.String, default: 'plastic' },
+ tint: { type: Types.String, default: '#b4b9bc' },
+});
+export const RoomInputVisuals = createComponent('RoomInputVisuals', {
+ handedness: { type: Types.String, default: 'right' },
+ mode: { type: Types.String, default: 'none' },
+});
+export default defineComponents([RoomModel, RoomInputVisuals]);
