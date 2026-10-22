@@ -2,7 +2,7 @@
 
 公開URL: https://qstl.vercel.app/
 
-「3Dモデルを、目の前に。」PCとMeta Quest 3で共通のSTLライブラリを使う、日本語のWebビューアです。公式IWSDK 1.0.1のMixed Realityスターターをベースにしています。
+PCとMeta Quest 3で共通のSTLライブラリを使う、日本語のWebビューアです。公式IWSDK 1.0.1のMixed Realityスターターをベースにしています。
 
 ## 起動
 
