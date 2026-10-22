@@ -6,7 +6,7 @@ import {
  Object3D, PhysicsManipulation, Box3, MeshPhysicalMaterial, Color, Texture,
 } from '@iwsdk/core';
 import type { Slider } from '@pmndrs/uikit-horizon';
-import { RoomModel } from './components';
+import { RoomModel, RoomLibraryState } from './components';
 import type { ModelRecord } from '../shared/models';
 import { loadSTL, loadGLB, cloneModelScene, disposeParsed, type ParsedModel } from './model';
 import { createAssembly, createSceneAssembly, modelBounds, applyExplosion, type ExplodedPart } from './assembly';
@@ -45,7 +45,7 @@ export class RoomSystem extends createSystem({
  private active = false;
  private loading = false;
  private initialPlaced = false;
- private onLibrary?: ()=>void;
+ onLibraryRefresh?:()=>Promise<void>;
  private renderedText=new Map<string,string>();
  private assemblies=new Map<Entity,ExplodedPart[]>();
  private playbacks=new Map<Entity,ModelPlayback>();
@@ -63,6 +63,7 @@ export class RoomSystem extends createSystem({
   this.environment=indoorEnvironment(this.world.renderer);this.world.scene.environment=this.environment;
   this.cleanupFuncs.push(()=>{this.environment.dispose();if(this.world.scene.environment===this.environment)this.world.scene.environment=null;});
   this.libraryPanel = this.world.requireSceneObject<UIKitMLAsset>('RoomLibrary');
+  this.world.requireSceneEntity('RoomLibrary').addComponent(RoomLibraryState);
   const bind = (panel:UIKitMLAsset,id:string,fn:()=>void) => {
    const item=panel.requireElementById(id); item.name=id;
    item.addEventListener('click',fn);
@@ -94,6 +95,7 @@ export class RoomSystem extends createSystem({
   this.explosionSlider.labels.setProperties({fontSize:1.2,lineHeight:1.6});
   this.cleanupFuncs.push(()=>this.explosionSlider.setProperties({onValueChange:undefined}));
   bind(this.libraryPanel,'Add',()=>void this.addChosen());
+  bind(this.libraryPanel,'Refresh',()=>{void this.onLibraryRefresh?.().catch(()=>{});});
   bind(this.libraryPanel,'Previous',()=>{this.page=Math.max(0,this.page-1);this.renderLibrary();});
   bind(this.libraryPanel,'Next',()=>{this.page=Math.min(Math.ceil(this.library.length/PAGE_SIZE)-1,this.page+1);this.renderLibrary();});
   for(let i=0;i<PAGE_SIZE;i++) bind(this.libraryPanel,`Item${i}`,()=>{
@@ -133,9 +135,16 @@ export class RoomSystem extends createSystem({
   }).catch(error=>console.warn('日本語フォントの読み込み',error));
  }
  setLibrary(models:ModelRecord[]) {
+  const added=this.library.length>0&&models.some(m=>!this.library.some(previous=>previous.id===m.id));
   this.library=models;
+  this.page=added?0:Math.max(0,Math.min(this.page,Math.ceil(models.length/PAGE_SIZE)-1));
   this.chosen=models.find(m=>m.id===this.chosen?.id)??models[0]??null;
   this.renderLibrary();
+ }
+ setLibraryStatus(status:'loading'|'ready'|'error',message=''){
+  const entity=this.world.requireSceneEntity('RoomLibrary');
+  entity.setValue(RoomLibraryState,'status',status);entity.setValue(RoomLibraryState,'message',message);
+  this.setLabel(this.libraryPanel,'LibraryStatus',status==='loading'?'ライブラリを更新中…':status==='error'?'同期できません / 更新で再試行':`${this.library.length}件 / ${this.page+1}ページ目`);
  }
  private renderStaticLabels(){
   if(!this.selected)this.text('Selection','Quest3でSTLファイルを立体で見るアプリ');
@@ -146,12 +155,14 @@ export class RoomSystem extends createSystem({
   this.renderGravity();
   this.setLabel(this.materialsPanel,'AnimationPlayLabel','再生');this.setLabel(this.materialsPanel,'AnimationStopLabel','停止');
   this.renderPlayback();
-  for(const [id,label] of [['LibraryTitle','モデルライブラリ'],['AddLabel','追加'],['PreviousLabel','◀ 前'],['NextLabel','後ろ ▶']]){
+  for(const [id,label] of [['LibraryTitle','モデルライブラリ'],['AddLabel','追加'],['RefreshLabel','更新'],['PreviousLabel','◀ 前'],['NextLabel','後ろ ▶']]){
    this.setLabel(this.libraryPanel,id,label);
   }
  }
  private renderLibrary(){
   if(!this.libraryPanel) return;
+  const entity=this.world.requireSceneEntity('RoomLibrary');entity.setValue(RoomLibraryState,'count',this.library.length);entity.setValue(RoomLibraryState,'page',this.page);
+  if(entity.getValue(RoomLibraryState,'status')==='ready')this.setLibraryStatus('ready');
   for(let i=0;i<PAGE_SIZE;i++){
    const model=this.library[this.page*PAGE_SIZE+i];
    this.setLabel(this.libraryPanel,`Name${i}`,model?.name??'');

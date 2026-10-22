@@ -12,8 +12,8 @@ export class ModelLibrary extends EventTarget {
   refresh(): Promise<ModelRecord[]> {
     if (this.refreshing) return this.refreshing;
     this.refreshing = (async () => {
-      const response = await fetch('/api/models', { cache: 'no-store' });
-      if (!response.ok) throw new Error('ライブラリに接続できません。少し待ってお試しください。');
+      const response = await fetch('/api/models', { cache: 'no-store', signal:AbortSignal.timeout(20000) });
+      if (!response.ok) throw new Error(await apiError(response,'ライブラリに接続できません。少し待ってお試しください。'));
       const result = await response.json() as LibraryResponse;
       this.models = result.models.filter(model => !this.removed.has(model.id));
       this.storage = result.storage;

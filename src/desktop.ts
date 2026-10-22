@@ -26,6 +26,7 @@ export class DesktopApp {
   onXRRequest?: () => void;
   onModelSelected?: (record: ModelRecord, parsed: ParsedModel) => void;
   onLibraryChanged?: (models: ModelRecord[]) => void;
+  onLibraryStatus?: (status:'loading'|'ready'|'error',message?:string)=>void;
   private gallery: PhotoGallery;
   private host: HTMLElement;
   private viewport: HTMLElement;
@@ -70,6 +71,8 @@ export class DesktopApp {
   private dragDepth = 0;
   private toastTimer = 0;
   private pollTimer = 0;
+  private nextRefresh=0;
+  private refreshOnReturn=()=>{if(!document.hidden&&!this.uploading&&!this.deleting.size)void this.refresh().catch(()=>this.setStorageOffline());};
   private resizeObserver: ResizeObserver;
   private immersive = false;
   private xrAvailable = false;
@@ -136,20 +139,25 @@ export class DesktopApp {
     this.initRenderer();
     this.renderLibrary();
     void this.refresh().catch(() => { this.setStorageOffline(); });
-    this.pollTimer = window.setInterval(() => { if (!document.hidden && !this.uploading && !this.deleting.size) void this.refresh().catch(() => this.setStorageOffline()); }, 12_000);
+    this.pollTimer = window.setInterval(() => { if ((!document.hidden || this.immersive) && Date.now()>=this.nextRefresh && !this.uploading && !this.deleting.size) void this.refresh().catch(() => this.setStorageOffline()); }, 12_000);
+    document.addEventListener('visibilitychange',this.refreshOnReturn);window.addEventListener('focus',this.refreshOnReturn);
   }
 
   get current(): { record: ModelRecord; parsed: ParsedModel } | null { return this.active && this.parsed ? { record: this.active, parsed: this.parsed } : null; }
 
   async refresh(): Promise<void> {
+    this.onLibraryStatus?.('loading');
+    try{
     const wasEmpty = !this.active;
     const previous = this.library.models[0]?.id;
     await this.library.refresh();
+    this.nextRefresh=0;this.onLibraryStatus?.('ready');
     if ((wasEmpty || (this.immersive && previous !== this.library.models[0]?.id)) && this.library.models[0]) await this.show(this.library.models[0]);
+    }catch(error){this.nextRefresh=Date.now()+60_000;this.onLibraryStatus?.('error',error instanceof Error?error.message:'ライブラリを更新できませんでした');throw error;}
   }
 
   setXRAvailable(available: boolean): void { this.xrAvailable = available; this.host.classList.toggle('xr-available', available); }
-  setImmersive(active: boolean): void { this.immersive = active; this.host.classList.toggle('immersive', active); }
+  setImmersive(active: boolean): void { this.immersive = active; this.host.classList.toggle('immersive', active);if(active)void this.refresh().catch(()=>this.setStorageOffline()); }
   notify(message: string): void { this.toast.textContent = message; this.toast.classList.add('visible'); clearTimeout(this.toastTimer); this.toastTimer = window.setTimeout(() => this.toast.classList.remove('visible'), 5000); }
 
   async show(record: ModelRecord): Promise<void> {
@@ -521,6 +529,7 @@ export class DesktopApp {
     this.gallery.dispose();
     this.playback?.dispose();if(this.model&&this.parsed?.scene)disposeModelScene(this.model);
     this.disposed = true; cancelAnimationFrame(this.requestId); clearInterval(this.pollTimer); clearTimeout(this.toastTimer); this.resizeObserver.disconnect();
+    document.removeEventListener('visibilitychange',this.refreshOnReturn);window.removeEventListener('focus',this.refreshOnReturn);
     disposeAssembly(this.assemblyParts);
     for (const model of new Set(this.cache.values())) disposeParsed(model);
     this.material.dispose(); this.lines?.geometry.dispose(); (this.lines?.material as LineBasicMaterial | undefined)?.dispose();

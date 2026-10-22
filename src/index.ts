@@ -20,6 +20,9 @@ async function initialize(){
   world.registerSystem(RoomMeasurementSystem);
   world.registerSystem(RoomPhotoSystem);
   const room=world.getSystem(RoomSystem)!;
+  room.onLibraryRefresh=()=>desktop.refresh();
+  desktop.onLibraryStatus=(status,message)=>room.setLibraryStatus(status,message);
+  void desktop.refresh().catch(()=>{});
   desktop.onXRRequest=()=>{
    world.getSystem(RoomPhotoSystem)?.unlockAudio();
    world.renderer.xr.setReferenceSpaceType('local-floor');

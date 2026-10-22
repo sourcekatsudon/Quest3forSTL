@@ -9,6 +9,7 @@ function Find($Name){return [int](Iw 'ecs' 'find' @{namePattern=$Name;limit=5}).
 function Point($Panel,$Selector,$Row=-1){
  $element=(Iw 'ui' 'inspect' @{entityIndex=$Panel;selector=$Selector}).elements[0];$x=$element.layout.relativeCenter[0];$y=$element.layout.relativeCenter[1]
  if($Selector -in @('#Reset','#ActualSize','#Delete','#Gravity','#Recall','#Explode')){$normal=(Iw 'ui' 'inspect' @{entityIndex=$Panel;selector='#NormalControls'}).elements[0];$x+=$normal.layout.relativeCenter[0];$y+=$normal.layout.relativeCenter[1]}
+ if($Selector -in @('#Add','#Refresh')){$actions=(Iw 'ui' 'inspect' @{entityIndex=$Panel;selector='.actions'}).elements[0];$x+=$actions.layout.relativeCenter[0];$y+=$actions.layout.relativeCenter[1]}
  if($Row-ge 0){$parent=(Iw 'ui' 'inspect' @{entityIndex=$Panel;selector='.row'}).elements[$Row];$x+=$parent.layout.relativeCenter[0];$y+=$parent.layout.relativeCenter[1]}
  $t=Values (Iw 'ecs' 'query' @{entityIndex=$Panel;components=@('Transform')}) 'Transform';$q=$t.orientation
  $v=[System.Numerics.Vector3]::new($x*.01*$t.scale[0],$y*.01*$t.scale[1],0);$rot=[System.Numerics.Quaternion]::new($q[0],$q[1],$q[2],$q[3]);$v=[System.Numerics.Vector3]::Transform($v,$rot)

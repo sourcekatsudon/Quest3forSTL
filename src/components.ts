@@ -39,4 +39,10 @@ export const RoomPhotoCapture = createComponent('RoomPhotoCapture', {
  countdown: { type: Types.Int8, default: 0 },
  photoId: { type: Types.String, default: '' },
 });
-export default defineComponents([RoomModel, RoomInputVisuals, RoomMeasurementMode, RoomDimension, RoomPhotoCapture]);
+export const RoomLibraryState = createComponent('RoomLibraryState', {
+ status:{type:Types.String,default:'loading'},
+ count:{type:Types.Int32,default:0},
+ page:{type:Types.Int32,default:0},
+ message:{type:Types.String,default:''},
+});
+export default defineComponents([RoomModel, RoomInputVisuals, RoomMeasurementMode, RoomDimension, RoomPhotoCapture, RoomLibraryState]);

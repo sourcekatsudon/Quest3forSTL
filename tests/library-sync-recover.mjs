@@ -1,0 +1,1 @@
+export default async function({frame,page}){return (frame??page).evaluate(()=>{if(window.__libraryNativeFetch)window.fetch=window.__libraryNativeFetch;delete window.__libraryNativeFetch;return {outage:false};});}

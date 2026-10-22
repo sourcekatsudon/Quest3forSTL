@@ -28,6 +28,17 @@ Without login, anyone who knows the service URL can view and add models.
 Private storage protects direct Blob access, not the public application's
 anonymous library API. Private downloads stream through `/api/assets`.
 
+Model and photo listings use Vercel Runtime Cache in the Tokyo region, scoped to
+the project and store, for up to two hours. Successful uploads and deletions
+change a shared revision immediately; an older in-flight list cannot repopulate
+a valid stale entry. Twelve-second browser polling reads this cache instead of
+calling Blob `list()` on every request. Transient storage failures back off for
+60 seconds; suspended/forbidden stores back off for six hours to avoid spending
+more list operations during suspension. Both return 503 with `Retry-After`;
+they never replace the library with an empty
+successful response. A suspended Hobby Blob store still requires reactivation
+or the provider's quota reset; code caching cannot undo that suspension.
+
 Run the opt-in real-store smoke test with `npx tsx server/blob-smoke.ts` after
 setting the token in `.env.local`. It creates a synthetic model, exercises
 direct upload, publication, list and asset APIs, verifies create-only conflicts,

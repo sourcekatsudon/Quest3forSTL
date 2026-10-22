@@ -1,9 +1,11 @@
 import { ApiError } from './validation.js';
+import { storageError } from './catalog-cache.js';
 
 export function apiError(error: unknown): Response {
+  error=storageError(error)??error;
   const status = error instanceof ApiError ? error.status : error instanceof SyntaxError || error instanceof TypeError ? 400 : 500;
   if (status === 500) console.error('STL ROOM API:', error instanceof Error ? error.message.replace(/vercel_blob_rw_[\w_-]+/g, '[redacted]') : 'Unexpected error');
-  return Response.json({ error: error instanceof ApiError ? error.message : status === 400 ? '送信内容を確認してください。' : 'クラウドとの通信に失敗しました。もう一度お試しください。' }, { status, headers: { 'Cache-Control': 'no-store' } });
+  return Response.json({ error: error instanceof ApiError ? error.message : status === 400 ? '送信内容を確認してください。' : 'クラウドとの通信に失敗しました。もう一度お試しください。' }, { status, headers: { 'Cache-Control': 'no-store',...(status===503?{'Retry-After':'60'}:{}) } });
 }
 
 export async function smallJson(request: Request): Promise<unknown> {
