@@ -38,7 +38,7 @@ export default async function run({ page, frame, context, workspaceRoot }) {
   const guide = app.locator('.quest-access-guide');
   assert.ok(await guide.isVisible());
   assert.match(await guide.textContent(), /Questのブラウザで/);
-  assert.equal(await guide.locator('a').getAttribute('href'), 'https://stl-room-photors-projects.vercel.app/');
+  assert.equal(await guide.locator('a').getAttribute('href'), 'https://qstl.vercel.app/');
   assert.match(await guide.textContent(), /にアクセスしてください/);
   const guideBounds = await guide.boundingBox(), previewBounds = await app.locator('.canvas-host').boundingBox();
   assert.ok(guideBounds.y + guideBounds.height <= previewBounds.y, 'Quest URL guidance does not cover the model preview');

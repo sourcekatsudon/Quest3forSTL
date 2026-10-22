@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {writeFile} from 'node:fs/promises';
 export default async function({context,workspaceRoot}){
  const page=await context.newPage();
- const origin='https://stl-room-photors-projects.vercel.app';
+ const origin='https://qstl.vercel.app';
  const name=`browser-cloud-smoke-${crypto.randomUUID()}.stl`;
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  try{
@@ -21,7 +21,7 @@ export default async function({context,workspaceRoot}){
   await page.getByRole('button',{name:'ブラウザで表示',exact:true}).click();
   assert.ok(await page.locator('.canvas-host canvas').evaluate(element=>document.activeElement===element));
   assert.ok(await page.getByRole('button',{name:'Questで開く',exact:true}).isVisible());
-  assert.equal(await page.locator('.quest-access-guide a').textContent(),'https://stl-room-photors-projects.vercel.app/');
+  assert.equal(await page.locator('.quest-access-guide a').textContent(),'https://qstl.vercel.app/');
   const thumbnails=await page.locator('.model-list img').evaluateAll(images=>images.every(i=>i.complete&&i.naturalWidth>0));
   assert.ok(thumbnails,'Saved cloud thumbnail loads after reload');
   assert.deepEqual(errors,[]);

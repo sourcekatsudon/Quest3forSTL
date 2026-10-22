@@ -6,7 +6,7 @@ export default async function({context,workspaceRoot}){
  const name=`delete-cloud-smoke-${Date.now()}.stl`,source=Buffer.from('solid fixture\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 100 0 0\nvertex 0 100 0\nendloop\nendfacet\nendsolid fixture');
  let record;
  try{
-  await page.goto('https://stl-room-photors-projects.vercel.app/',{waitUntil:'networkidle'});
+  await page.goto('https://qstl.vercel.app/',{waitUntil:'networkidle'});
   const before=await page.evaluate(async()=>(await(await fetch('/api/models')).json()).models.map(m=>m.id));
   const saved=page.waitForResponse(response=>response.url().endsWith('/api/models')&&response.request().method()==='POST');
   await page.locator('.file-input').setInputFiles({name,mimeType:'model/stl',buffer:source});

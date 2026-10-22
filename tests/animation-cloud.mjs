@@ -5,7 +5,7 @@ export default async function({context,workspaceRoot}){
  const page=await context.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));
  const bytes=await readFile(`${workspaceRoot}/tests/fixtures/animated.glb`),name=`browser-cloud-smoke-animation-${Date.now()}.glb`;
  try{
-  await page.goto('https://stl-room-photors-projects.vercel.app/',{waitUntil:'networkidle'});
+  await page.goto('https://qstl.vercel.app/',{waitUntil:'networkidle'});
   await page.locator('.storage-text').filter({hasText:'クラウドと同期'}).waitFor();
   await page.locator('.file-input').setInputFiles({name,mimeType:'model/gltf-binary',buffer:bytes});
   await page.locator('.model-title').filter({hasText:name.replace('.glb','')}).waitFor({timeout:60000});

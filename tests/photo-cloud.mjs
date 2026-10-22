@@ -5,7 +5,7 @@ export default async function({context,workspaceRoot}){
  const page=await context.newPage(),id=randomUUID(),errors=[];page.on('pageerror',error=>errors.push(error.message));
  await writeFile(`${workspaceRoot}/artifacts/photo-cloud-id.json`,JSON.stringify({id}));
  try{
-  await page.goto('https://stl-room-photors-projects.vercel.app/',{waitUntil:'networkidle'});
+  await page.goto('https://qstl.vercel.app/',{waitUntil:'networkidle'});
   const bytes=Array.from(await readFile(`${workspaceRoot}/artifacts/photo-capture.jpg`));
   const saved=await page.evaluate(async({id,bytes})=>{
    const save=()=>fetch(`/api/photos?id=${id}`,{method:'POST',headers:{'Content-Type':'image/jpeg'},body:new Uint8Array(bytes)});

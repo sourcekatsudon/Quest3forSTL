@@ -4,7 +4,7 @@ export default async function({context,workspaceRoot}){
  const fixture=JSON.parse(await readFile(`${workspaceRoot}/artifacts/optimization-fixture.json`,'utf8'));
  const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
  try{
-  await page.goto('https://stl-room-photors-projects.vercel.app/',{waitUntil:'networkidle'});
+  await page.goto('https://qstl.vercel.app/',{waitUntil:'networkidle'});
   await page.locator('.storage-text').filter({hasText:'クラウドと同期'}).waitFor();
   await page.locator('.file-input').setInputFiles(`${workspaceRoot}/artifacts/${fixture.name}`);
   await page.locator('.save-status').filter({hasText:'表示用に軽量化済み'}).waitFor({timeout:150000});
