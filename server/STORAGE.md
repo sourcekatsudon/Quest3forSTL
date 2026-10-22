@@ -39,6 +39,23 @@ they never replace the library with an empty
 successful response. A suspended Hobby Blob store still requires reactivation
 or the provider's quota reset; code caching cannot undo that suspension.
 
+After the provider reactivates a suspended store (for example after a plan
+upgrade), first confirm `vercel blob get-store <store-id>` reports Active and a
+private Blob read succeeds. Then, from this linked project, run
+`vercel cache purge --type data --yes --scope photors-projects` to clear cached
+503 responses immediately. Check both `/api/models` and `/api/photos` return
+200. Purging this cache does not delete models or photos.
+
+The opt-in managed-browser test `tests/cloud-library-sync.mjs` uploads one
+synthetic model through the public production UI, then observes the real cloud
+catalog from the local immersive emulator. It saves the created ID and the
+pre-existing IDs to `artifacts/cloud-sync-fixture.json`; remove only that exact
+test ID through the production library after verification using
+`tests/cloud-library-cleanup.mjs`. Run either script with
+`npx @iwsdk/cli browser run <script> --timeout 100000` in an automation-enabled
+managed runtime. To retry verification without another upload, set
+`CLOUD_SYNC_REUSE_FIXTURE=1` for the sync script while its fixture still exists.
+
 Run the opt-in real-store smoke test with `npx tsx server/blob-smoke.ts` after
 setting the token in `.env.local`. It creates a synthetic model, exercises
 direct upload, publication, list and asset APIs, verifies create-only conflicts,
