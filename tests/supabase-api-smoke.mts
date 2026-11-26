@@ -22,12 +22,14 @@ const before = await json('/api/models');
 assert.equal(before.uploadBackend,'supabase');
 assert.ok(!before.models.some((model:{id:string})=>model.id===id));
 let published = false;
+let uploaded = false;
 try {
  const ticket = await json('/api/upload',{method:'POST',headers,body:JSON.stringify({pathname,size:original.byteLength})});
  assert.equal(ticket.pathname,pathname);
  assert.ok(new URL(ticket.url).searchParams.has('token'));
  const upload = await fetch(ticket.url,{method:'PUT',headers:{'Content-Type':'model/stl','x-upsert':'false'},body:original});
  assert.ok(upload.ok,'direct upload returned '+upload.status);
+ uploaded = true;
  const commit = {name:'supabase-smoke.stl',modelPathname:pathname};
  const saved = await json('/api/models',{method:'POST',headers,body:JSON.stringify(commit)});
  published = true;
@@ -42,6 +44,7 @@ try {
  const removed = await fetch(url('/api/models?id='+id),{method:'DELETE',headers:{Origin:base.origin}});
  assert.equal(removed.status,204);
  published = false;
+ uploaded = false;
  const final = await json('/api/models');
  assert.ok(!final.models.some((model:{id:string})=>model.id===id));
  assert.ok(before.models.every((model:{id:string})=>final.models.some((other:{id:string})=>other.id===model.id)),'preexisting models must remain');
@@ -50,5 +53,5 @@ try {
  if (published) {
    const cleanup = await fetch(url('/api/models?id='+id),{method:'DELETE',headers:{Origin:base.origin}});
    if (!cleanup.ok) console.error('Fixture cleanup failed for ID '+id);
- }
+ } else if (uploaded) console.error('Unpublished fixture may remain in Storage at '+pathname+'; inspect before manual cleanup.');
 }

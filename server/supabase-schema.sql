@@ -58,24 +58,25 @@ begin
    if p_kind='photo' and r.fingerprint=p_fingerprint then return; end if;
    raise exception 'conflict';
   end if;
-  if r.expires_at<=now() then raise exception 'reservation'; end if;
+  if r.expires_at<=clock_timestamp() then raise exception 'reservation'; end if;
   if is_thumb then
    if r.thumbnail_path is not null and (r.thumbnail_path<>p_path or r.thumbnail_bytes<>p_bytes) then raise exception 'conflict'; end if;
-   update public.stl_room_entries set thumbnail_path=p_path,thumbnail_bytes=p_bytes,expires_at=now()+interval '125 minutes' where kind=p_kind and id=p_id;
+   update public.stl_room_entries set thumbnail_path=p_path,thumbnail_bytes=p_bytes,expires_at=clock_timestamp()+interval '125 minutes' where kind=p_kind and id=p_id;
   else
    if r.path<>p_path or r.bytes<>p_bytes or r.fingerprint is distinct from p_fingerprint then raise exception 'conflict'; end if;
-   update public.stl_room_entries set expires_at=now()+interval '125 minutes' where kind=p_kind and id=p_id;
+   update public.stl_room_entries set expires_at=clock_timestamp()+interval '125 minutes' where kind=p_kind and id=p_id;
   end if;
   return;
  end if;
  if is_thumb then raise exception 'reservation'; end if;
- if (select count(*) from public.stl_room_entries where kind=p_kind and (status='published' or (status='reserved' and expires_at>now()))) >= p_limit then raise exception 'quota'; end if;
- insert into public.stl_room_entries(kind,id,status,path,bytes,fingerprint,expires_at) values(p_kind,p_id,'reserved',p_path,p_bytes,p_fingerprint,now()+interval '125 minutes');
+ if (select count(*) from public.stl_room_entries where kind=p_kind and (status='published' or (status='reserved' and expires_at>clock_timestamp()))) >= p_limit then raise exception 'quota'; end if;
+ insert into public.stl_room_entries(kind,id,status,path,bytes,fingerprint,expires_at) values(p_kind,p_id,'reserved',p_path,p_bytes,p_fingerprint,clock_timestamp()+interval '125 minutes');
 end; $$;
 create or replace function public.stl_room_publish(p_kind text,p_id text,p_payload jsonb)
 returns jsonb language plpgsql security invoker set search_path = '' as $$
 declare r public.stl_room_entries%rowtype;
 begin
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('stl-room-reserve:'||p_kind));
  select * into r from public.stl_room_entries where kind=p_kind and id=p_id for update;
  if not found then raise exception 'reservation'; end if;
  if r.status='deleted' then raise exception 'deleted'; end if;
@@ -83,7 +84,7 @@ begin
  if p_kind='model' and (p_payload->>'modelPathname' is distinct from r.path or p_payload->>'thumbnailPathname' is distinct from r.thumbnail_path) then raise exception 'conflict'; end if;
  if p_kind='photo' and p_payload->>'digest' is distinct from r.fingerprint then raise exception 'conflict'; end if;
  if r.status='published' then return r.payload; end if;
- if r.expires_at<=now() then raise exception 'reservation'; end if;
+ if r.expires_at<=clock_timestamp() then raise exception 'reservation'; end if;
  update public.stl_room_entries set status='published',payload=p_payload where kind=p_kind and id=p_id;
  return p_payload;
 end; $$;
