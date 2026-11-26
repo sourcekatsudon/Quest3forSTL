@@ -9,6 +9,8 @@ export class ModelLibrary extends EventTarget {
   limits = { maxFileBytes: 50 * 1024 * 1024, maxModels: 50 };
   private refreshing: Promise<ModelRecord[]> | null = null;
   private removed = new Set<string>();
+  // A successful binary transfer can be retried without uploading the same bytes again.
+  private pendingUploads = new Map<string, { modelPathname: string; thumbnailPathname?: string; expires: number }>();
 
   refresh(): Promise<ModelRecord[]> {
     if (this.refreshing) return this.refreshing;
@@ -37,6 +39,15 @@ export class ModelLibrary extends EventTarget {
   async save(file: File, thumbnail?: Blob): Promise<ModelRecord> {
     if (file.size > this.limits.maxFileBytes) throw new Error(`${Math.round(this.limits.maxFileBytes / 1024 / 1024)} MB以下のSTL・STEPを選んでください。`);
     if (this.models.length >= this.limits.maxModels) throw new Error('保存できるモデル数の上限に達しました。');
+    const supabase = this.storage === 'cloud' && this.uploadBackend === 'supabase';
+    let retryKey: string | undefined;
+    if (supabase) {
+      const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+      retryKey = file.name + ':' + Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+      for (const [key, pending] of this.pendingUploads) if (pending.expires <= Date.now()) this.pendingUploads.delete(key);
+    }
+    const pending = retryKey ? this.pendingUploads.get(retryKey) : undefined;
+    if (pending) return this.commitUpload(file.name, pending.modelPathname, pending.thumbnailPathname, retryKey);
     const id = crypto.randomUUID();
     const put = async (blob: Blob, kind: 'model' | 'thumbnail'): Promise<string> => {
       const extension = kind === 'model' ? file.name.split('.').at(-1)!.toLowerCase() : 'png';
@@ -66,12 +77,35 @@ export class ModelLibrary extends EventTarget {
     const [modelPathname, thumbnailPathname] = this.uploadBackend === 'supabase'
       ? [await put(file, 'model'), thumbnail ? await put(thumbnail, 'thumbnail') : undefined]
       : await Promise.all([put(file, 'model'), thumbnail ? put(thumbnail, 'thumbnail') : undefined]);
-    const response = await fetch('/api/models', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: file.name, modelPathname, thumbnailPathname }),
-    });
-    if (!response.ok) throw new Error(await apiError(response));
+    if (retryKey) {
+      if (this.pendingUploads.size >= 16) this.pendingUploads.delete(this.pendingUploads.keys().next().value!);
+      this.pendingUploads.set(retryKey, { modelPathname, thumbnailPathname, expires: Date.now() + 115 * 60 * 1000 });
+    }
+    return this.commitUpload(file.name, modelPathname, thumbnailPathname, retryKey);
+  }
+
+  private async commitUpload(name: string, modelPathname: string, thumbnailPathname?: string, retryKey?: string): Promise<ModelRecord> {
+    let response: Response;
+    try {
+      response = await fetch('/api/models', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, modelPathname, thumbnailPathname }),
+      });
+    } catch (error) {
+      if (retryKey) throw new Error('ファイル本体は送信済みですが、モデル登録の結果を確認できませんでした。同じファイルを再選択すると送信済みデータで再試行します。');
+      throw error;
+    }
+    if (!response.ok) {
+      if (retryKey && [404, 409, 410, 413, 422].includes(response.status)) this.pendingUploads.delete(retryKey);
+      if (response.status === 504 || response.status === 524) {
+        throw new Error(retryKey
+          ? 'モデルの変換が制限時間を超えました。ファイル本体は保存済みです。同じファイルを再選択して変換を再試行するか、STEPを分割してください。'
+          : 'モデルの変換が制限時間を超えました。STEPを分割して再試行してください。');
+      }
+      throw new Error(await apiError(response));
+    }
     const { model } = await response.json() as { model: ModelRecord };
+    if (retryKey) this.pendingUploads.delete(retryKey);
     this.models = [model, ...this.models.filter((item) => item.id !== model.id)];
     this.dispatchEvent(new Event('change'));
     return model;

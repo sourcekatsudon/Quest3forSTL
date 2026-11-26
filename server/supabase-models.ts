@@ -45,7 +45,9 @@ export async function supabaseCommit(input: ModelCommit): Promise<ModelRecord> {
     if (row.payload!.name !== name) throw new ApiError(409, '同じIDで異なる名前は保存できません。');
     return publicRecord(row.payload!);
   }
+  const started = Date.now();
   const sourceBytes = await bytes(path, limits.maxFileBytes);
+  if (/\.(step|stp)$/i.test(name)) console.info('STEP source fetched', {elapsedMs:Date.now()-started, bytes:sourceBytes.byteLength});
   if (sourceBytes.byteLength !== row.bytes) throw new ApiError(422, 'アップロードサイズが一致しません。');
   if (thumbnailPathname) {
     const thumbnail = await bytes(thumbnailPathname, MAX_THUMBNAIL_BYTES);
@@ -66,6 +68,7 @@ export async function supabaseCommit(input: ModelCommit): Promise<ModelRecord> {
     modelPathname: path, thumbnailPathname, displayPathname, assemblyPathname,
   };
   const saved = await publish('model',id,stored);
+  if (format === 'step') console.info('STEP published', {elapsedMs:Date.now()-started, parts:assembly?.parts.length ?? 0});
   if (saved.name !== name) throw new ApiError(409, '同じIDで異なる名前は保存できません。');
   return publicRecord(saved);
 }

@@ -28,7 +28,7 @@
   "functions": {
     "api/models.ts": {
       "includeFiles": "node_modules/{occt-import-js,draco3dgltf}/**/*.wasm",
-      "maxDuration": 60
+      "maxDuration": 300
     }
   }
 }
