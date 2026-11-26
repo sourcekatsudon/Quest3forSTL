@@ -19,8 +19,8 @@ async function handler(request: Request): Promise<Response> {
       const id = new URL(request.url).searchParams.get('id') || '';
       if (!idPattern.test(id)) throw new ApiError(400, 'モデルの指定が正しくありません。');
       await rateLimit(request);
-      await deleteCloudModel(id);
-      await invalidateCatalog('models');
+      try { await deleteCloudModel(id); }
+      finally { await invalidateCatalog('models'); }
       return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } });
     }
     return new Response(null, { status: 405, headers: { Allow: 'GET, POST, DELETE' } });

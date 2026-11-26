@@ -5,6 +5,8 @@ import { prepareModel } from './prepare-model.js';
 import type { LibraryResponse, ModelCommit, ModelRecord } from '../shared/models';
 import { ApiError, idPattern, inspectStl, limits, MAX_THUMBNAIL_BYTES, validateName, validatePath, validatePng } from './validation.js';
 import { modelFiles } from './model-files.js';
+import { usesSupabase } from './supabase-rest.js';
+import { supabaseLibrary, supabaseRateLimit, supabaseCommit, supabaseDelete, supabaseAsset } from './supabase-models.js';
 
 interface StoredModel extends ModelRecord { modelPathname: string; thumbnailPathname?: string; displayPathname?: string; assemblyPathname?: string }
 const PENDING = 'stl-room:v1:pending';
@@ -38,6 +40,7 @@ async function slotPaths(): Promise<string[]> {
 }
 
 export async function cloudLibrary(): Promise<LibraryResponse> {
+  if (usesSupabase()) return supabaseLibrary();
   const paths = await slotPaths();
   const deleted = new Set<string>();
   let cursor: string | undefined;
@@ -60,6 +63,7 @@ export async function cloudLibrary(): Promise<LibraryResponse> {
 }
 
 export async function rateLimit(request: Request) {
+  if (usesSupabase()) return supabaseRateLimit(request);
   const ip = (request.headers.get('x-forwarded-for') || 'unknown').split(',')[0].trim();
   const digest = createHash('sha256').update(ip).digest('hex').slice(0, 24);
   const redis = optionalRedis();
@@ -137,6 +141,7 @@ async function assertNotDeleted(id: string): Promise<void> {
 }
 
 export async function deleteCloudModel(id: string): Promise<void> {
+  if (usesSupabase()) return supabaseDelete(id);
   if (!idPattern.test(id)) throw new ApiError(400, 'モデルの指定が正しくありません。');
   requireBlob();
   const marker = `${DELETED_PREFIX}${id}.json`;
@@ -167,6 +172,7 @@ export async function deleteCloudModel(id: string): Promise<void> {
 }
 
 export async function commitCloudModel(input: ModelCommit): Promise<ModelRecord> {
+  if (usesSupabase()) return supabaseCommit(input);
   const name = validateName(input.name);
   const modelPathname = validatePath(input.modelPathname, 'model');
   const thumbnailPathname = input.thumbnailPathname ? validatePath(input.thumbnailPathname, 'png') : undefined;
@@ -240,6 +246,7 @@ export async function commitCloudModel(input: ModelCommit): Promise<ModelRecord>
 }
 
 export async function cloudAsset(id: string, kind: 'model' | 'original' | 'thumbnail' | 'assembly'): Promise<Response> {
+  if (usesSupabase()) return supabaseAsset(id, kind);
   await assertNotDeleted(id);
   const record = await readManifest(`models/${id}.json`);
   const pathname = kind === 'assembly' ? record.assemblyPathname : kind === 'thumbnail' ? record.thumbnailPathname : kind === 'original' ? record.modelPathname : record.displayPathname ?? record.modelPathname;

@@ -30,10 +30,13 @@ export async function prepareModel(bytes: Uint8Array, name: string): Promise<Pre
   }
   if (!/\.(step|stp)$/i.test(name)) return {source:inspectStl(bytes),optimized:await optimizeStl(bytes),format:'stl'};
   validateStep(bytes);
+  const startMs=Date.now();
+  console.info('STEP conversion start', {bytes:bytes.length});
   const occt=await stepImporter();
   let result: ReturnType<typeof occt.ReadStepFile>;
   try { result=occt.ReadStepFile(bytes,{linearUnit:'millimeter',linearDeflectionType:'absolute_value',linearDeflection:.15,angularDeflection:.35}); }
   catch { throw new ApiError(422,'STEPを変換できませんでした。形状を確認して再エクスポートしてください。'); }
+  console.info('STEP tessellation finished', {elapsedMs:Date.now()-startMs, parts:result.meshes?.length ?? 0});
   if(!result.success||!result.meshes?.length) throw new ApiError(422,'STEPに表示できる部品がありません。外部参照を含めて書き出してください。');
   if(result.meshes.length>1000) throw new ApiError(413,'STEPは1000部品以下に分けてください。');
   const sourceTriangles=result.meshes.reduce((n,m)=>n+m.index.array.length/3,0);
@@ -76,5 +79,6 @@ export async function prepareModel(bytes: Uint8Array, name: string): Promise<Pre
   new DataView(display.buffer).setUint32(80,start,true);
   let offset=84;for(const part of outputs){display.set(part.subarray(84),offset);offset+=part.length-84;}
   inspectStl(display);
+  console.info('STEP conversion finished', {elapsedMs:Date.now()-startMs, sourceTriangles, displayTriangles:start});
   return {format:'step',assembly,source:{triangles:sourceTriangles,dimensions:{width:sourceMax[0]-sourceMin[0],depth:sourceMax[1]-sourceMin[1],height:sourceMax[2]-sourceMin[2]}},optimized:{bytes:display,metadata:{version:1,triangles:start,size:display.length,targetTriangles:target,estimatedErrorMm,errorLimitMm,status:failed?'failed':start===sourceTriangles?'unchanged':start<=target?'simplified':'quality-limited'}}};
 }

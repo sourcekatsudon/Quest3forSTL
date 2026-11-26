@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run && tsx --test server/backend.test.ts server/optimization.test.ts server/step.test.ts server/glb.test.ts server/photos.test.ts",
+    "test": "vitest run && tsx --test server/backend.test.ts server/optimization.test.ts server/step.test.ts server/glb.test.ts server/photos.test.ts server/supabase.test.ts",
     "test:e2e": "iwsdk browser run tests/desktop.e2e.mjs --timeout 90000"
   },
   "dependencies": {
@@ -53,6 +53,6 @@
     "three": "npm:super-three@0.181.0"
   },
   "engines": {
-    "node": ">=20.19.0 <21.0.0-0 || >=22.12.0 <23.0.0-0 || >=24.0.0"
+    "node": ">=20.19.0 <21.0.0-0 || >=22.12.0 <23.0.0-0 || >=24.0.0 <25.0.0"
   }
 }

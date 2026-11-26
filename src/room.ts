@@ -9,7 +9,7 @@ import type { Slider } from '@pmndrs/uikit-horizon';
 import { RoomModel, RoomLibraryState } from './components';
 import type { ModelRecord } from '../shared/models';
 import { loadSTL, loadGLB, cloneModelScene, disposeParsed, type ParsedModel } from './model';
-import { createAssembly, createSceneAssembly, modelBounds, applyExplosion, type ExplodedPart } from './assembly';
+import { createAssembly, createSceneAssembly, applyRoomExplosion, type ExplodedPart } from './assembly';
 import {indoorEnvironment,replaceSurface,surfaceMaterial} from './materials';
 import {floorMotion} from './floor-motion';
 import {renderThumbnail} from './thumbnail';
@@ -338,12 +338,9 @@ export class RoomSystem extends createSystem({
   if(!entity?.object3D||!parts)return;
   const amount=Math.max(0,Math.min(1,Number.isFinite(value)?value:0));
   this.world.getSystem(GrabSystem)?.forceRelease(entity);
-  const extents=entity.getVectorView(RoomModel,'extents'),oldSize=Math.max(...extents);
-  applyExplosion(parts,amount);
-  const bounds=modelBounds(entity.object3D);
-  for(let axis=0;axis<3;axis++)extents[axis]=Math.max(.001,2*Math.max(Math.abs(bounds.min.getComponent(axis)),Math.abs(bounds.max.getComponent(axis))));
-  // Keep the whole exploded assembly within its previous viewing envelope.
-  entity.object3D.scale.multiplyScalar(oldSize/Math.max(...extents));
+  const extents=entity.getVectorView(RoomModel,'extents');
+  const expanded=applyRoomExplosion(entity.object3D,parts,amount);
+  for(let axis=0;axis<3;axis++)extents[axis]=expanded[axis];
   entity.setValue(RoomModel,'explosion',amount);
   this.rebuildCollider(entity,true);this.renderExplosion();
  }
@@ -421,16 +418,20 @@ export class RoomSystem extends createSystem({
   this.initialPlaced=true;void this.addChosen();
  }
  private rebuildCollider(entity:Entity,reset=false){
-  if(!entity.object3D||!entity.hasComponent(PhysicsBody))return;
+  if(!entity.object3D||!entity.hasComponent(PhysicsShape))return;
   // IWSDK 1.0.1 does not resize Havok shapes when Object3D.scale changes.
-  // Remove the body for one ECS tick, then recreate its box at the measured size.
-  const v=entity.getVectorView(PhysicsBody,'_linearVelocity');
-  const a=entity.getVectorView(PhysicsBody,'_angularVelocity');
-  const velocity:[number,number,number]=reset?[0,0,0]:[v[0],v[1],v[2]];
-  const angular:[number,number,number]=reset?[0,0,0]:[a[0],a[1],a[2]];
+  // Recreate the body next tick, but also update the queued shape if the
+  // explosion slider changes again before the body is restored.
+  if(entity.hasComponent(PhysicsBody)){
+   const v=entity.getVectorView(PhysicsBody,'_linearVelocity');
+   const a=entity.getVectorView(PhysicsBody,'_angularVelocity');
+   const velocity:[number,number,number]=reset?[0,0,0]:[v[0],v[1],v[2]];
+   const angular:[number,number,number]=reset?[0,0,0]:[a[0],a[1],a[2]];
+   this.rebuiltBodies.set(entity,{velocity,angular});
+   entity.removeComponent(PhysicsBody);
+  }else if(!this.rebuiltBodies.has(entity))return;
+  else if(reset)this.rebuiltBodies.set(entity,{velocity:[0,0,0],angular:[0,0,0]});
   if(reset)entity.setValue(RoomModel,'fallVelocity',0);
-  this.rebuiltBodies.set(entity,{velocity,angular});
-  entity.removeComponent(PhysicsBody);
   const extents=entity.getVectorView(RoomModel,'extents');
   const dimensions=entity.getVectorView(PhysicsShape,'dimensions');
   for(let i=0;i<3;i++)dimensions[i]=extents[i]*entity.object3D.scale.x;

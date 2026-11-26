@@ -3,6 +3,7 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { get, list, put } from '@vercel/blob';
 import sharp from 'sharp';
+import { usesSupabase, entries, reserve, publish, writeImmutable, assetRedirect } from './supabase-rest.js';
 import { photoLimits, type PhotoRecord } from '../shared/photos.js';
 import { ApiError, idPattern } from './validation.js';
 
@@ -43,12 +44,22 @@ async function cloudPaths() {
  return page.blobs.map(blob => blob.pathname).filter(path => /^photo-slots\/\d{3}\.json$/.test(path));
 }
 export async function listCloudPhotos(): Promise<PhotoRecord[]> {
+ if (usesSupabase()) return (await entries<StoredPhoto>('photo')).map(row => publicPhoto(row.payload!)).sort((a,b) => b.createdAt.localeCompare(a.createdAt));
  const paths = await cloudPaths(), photos: PhotoRecord[] = [];
  for (let i = 0; i < paths.length; i += 10) photos.push(...await Promise.all(paths.slice(i, i + 10).map(async path => publicPhoto(await readCloud(path)))));
  return photos.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 export async function saveCloudPhoto(id: string, bytes: Uint8Array): Promise<PhotoRecord> {
- photoId(id);
+ id = photoId(id);
+ if (usesSupabase()) {
+  const image = await preparePhoto(bytes);
+  const row = (await entries<StoredPhoto>('photo',id))[0];
+  if (row?.status === 'published') return existing(row.payload!,image.digest);
+  const path = 'photos/' + id + '.jpg';
+  await reserve('photo',id,path,image.data.length,photoLimits.maxPhotos,image.digest);
+  await writeImmutable(path,image.data,'image/jpeg');
+  return existing(await publish('photo',id,record(id,image)),image.digest);
+ }
  const image = await preparePhoto(bytes), occupied = new Set(await cloudPaths());
  let priorManifest:StoredPhoto|undefined;
  try { priorManifest=await readCloud(`photos/${id}.json`); existing(priorManifest,image.digest); }
@@ -75,7 +86,12 @@ export async function saveCloudPhoto(id: string, bytes: Uint8Array): Promise<Pho
  throw new ApiError(409, '写真の保存上限（200枚）に達しました。');
 }
 export async function cloudPhotoAsset(id: string): Promise<Response> {
- photoId(id);
+ id = photoId(id);
+ if (usesSupabase()) {
+  const row = (await entries<StoredPhoto>('photo',id))[0];
+  if (row?.status !== 'published') throw new ApiError(404, '写真が見つかりません。');
+  return assetRedirect(row.path);
+ }
  const result = await get(`photos/${id}.jpg`, { access: 'private' });
  if (!result || result.statusCode !== 200) throw new ApiError(404, '写真が見つかりません。');
  return new Response(result.stream, { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, max-age=3600', 'X-Content-Type-Options': 'nosniff' } });

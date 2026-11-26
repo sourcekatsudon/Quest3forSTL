@@ -45,6 +45,10 @@ GLB（.glb）は埋め込み画像・元の材質・骨格・モーフ変形を�
 
 モデル同士の衝突による押し合いはOFFです。机・壁・部屋のメッシュや平面の検出も使いません。Questが設定した床基準（local-floor、Y=0）のみを使用し、重力ONのモデルは床まで落下して止まります。重力OFFでは放した位置に保持され、床より下へ移動した場合だけ床の上に補正します。部屋のスキャンへの権限は不要です。
 
+## Supabase保存先（オプション）
+
+Vercel Blobの停止・操作回数制限対策としてSupabase StorageとPostgresを選択できます。原本・軽量化・写真はprivate bucket、モデル/写真の一覧と予約はDBです。設定方法、切替前の検証、制限と旧データの扱いは [Supabaseセットアップ](server/SUPABASE.md) を参照してください。既定は従来のBlobであり、Supabaseを有効化するには `STL_STORAGE_BACKEND=supabase` が必要です。
+
 ## Vercelで公開
 
 ```powershell

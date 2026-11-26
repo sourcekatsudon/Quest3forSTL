@@ -1,5 +1,6 @@
 {
-  "buildCommand": "npm run build",
+  "installCommand": "npm ci --onnxruntime-node-install-cuda=skip",
+  "buildCommand": "npm run typecheck && env -u VERCEL -u BLOB_READ_WRITE_TOKEN -u UPSTASH_REDIS_REST_URL -u UPSTASH_REDIS_REST_TOKEN -u STL_STORAGE_BACKEND -u SUPABASE_URL -u SUPABASE_SERVICE_ROLE_KEY npm test && npm run build",
   "outputDirectory": "dist",
   "framework": "vite",
   "regions": [
@@ -27,7 +28,7 @@
   "functions": {
     "api/models.ts": {
       "includeFiles": "node_modules/{occt-import-js,draco3dgltf}/**/*.wasm",
-      "maxDuration": 60
+      "maxDuration": 300
     }
   }
 }

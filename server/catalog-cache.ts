@@ -6,7 +6,7 @@ type Entry<T>={revision:string;value?:T;error?:{status:number;message:string};ex
 const ttl=7200, failureTtl=60, suspendedTtl=21600;
 const local=new Map<string,{value:unknown;expires:number}>();
 const pending=new Map<string,Promise<unknown>>();
-function remote(){return process.env.VERCEL==='1'?getCache({namespace:`stl-room:${process.env.VERCEL_PROJECT_ID}:${createHash('sha256').update(process.env.BLOB_READ_WRITE_TOKEN??'unconfigured').digest('hex').slice(0,12)}:catalog-v1`}):null;}
+function remote(){return process.env.VERCEL==='1'?getCache({namespace:`stl-room:${process.env.VERCEL_PROJECT_ID}:${createHash('sha256').update(process.env.STL_STORAGE_BACKEND==='supabase'?(process.env.SUPABASE_URL??'supabase-unconfigured')+':'+(process.env.SUPABASE_STORAGE_BUCKET??'stl-room-assets'):(process.env.BLOB_READ_WRITE_TOKEN??'unconfigured')).digest('hex').slice(0,12)}:catalog-v1`}):null;}
 async function read<T>(key:string):Promise<T|undefined>{
  const cache=remote();if(cache)return await cache.get(key) as T|undefined;
  const entry=local.get(key);if(entry&&entry.expires>Date.now())return entry.value as T;
