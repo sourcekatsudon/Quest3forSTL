@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run && tsx --test server/backend.test.ts server/optimization.test.ts server/step.test.ts server/glb.test.ts server/photos.test.ts",
+    "test": "vitest run && tsx --test server/backend.test.ts server/optimization.test.ts server/step.test.ts server/glb.test.ts server/photos.test.ts server/supabase.test.ts",
     "test:e2e": "iwsdk browser run tests/desktop.e2e.mjs --timeout 90000"
   },
   "dependencies": {

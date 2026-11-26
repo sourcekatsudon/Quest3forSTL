@@ -2,10 +2,17 @@ import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
 import { rateLimit, reserveModel, sameOrigin } from '../server/cloud-store.js';
 import { apiError, smallJson } from '../server/http.js';
 import { ApiError, limits, MAX_THUMBNAIL_BYTES, uploadPattern, validatePath } from '../server/validation.js';
+import { usesSupabase } from '../server/supabase-rest.js';
+import { supabaseUpload } from '../server/supabase-models.js';
 
 export async function POST(request: Request): Promise<Response> {
   if (request.method !== 'POST') return new Response(null, { status: 405 });
   try {
+    if (usesSupabase()) {
+      sameOrigin(request);
+      await rateLimit(request);
+      return Response.json(await supabaseUpload(await smallJson(request) as { pathname?: unknown; size?: unknown }), { headers: { 'Cache-Control': 'no-store' } });
+    }
     const body = await smallJson(request) as HandleUploadBody;
     const response = await handleUpload({
       request, body,

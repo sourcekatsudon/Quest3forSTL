@@ -5,6 +5,7 @@ export type { ModelRecord } from '../shared/models';
 export class ModelLibrary extends EventTarget {
   models: ModelRecord[] = [];
   storage: 'local' | 'cloud' = 'local';
+  private uploadBackend?: 'supabase';
   limits = { maxFileBytes: 50 * 1024 * 1024, maxModels: 50 };
   private refreshing: Promise<ModelRecord[]> | null = null;
   private removed = new Set<string>();
@@ -17,6 +18,7 @@ export class ModelLibrary extends EventTarget {
       const result = await response.json() as LibraryResponse;
       this.models = result.models.filter(model => !this.removed.has(model.id));
       this.storage = result.storage;
+      this.uploadBackend = result.uploadBackend;
       this.limits = result.limits;
       this.dispatchEvent(new Event('change'));
       return this.models;
@@ -39,6 +41,16 @@ export class ModelLibrary extends EventTarget {
     const put = async (blob: Blob, kind: 'model' | 'thumbnail'): Promise<string> => {
       const extension = kind === 'model' ? file.name.split('.').at(-1)!.toLowerCase() : 'png';
       const contentType = kind === 'model' ? extension === 'stl' ? 'model/stl' : extension === 'glb' ? 'model/gltf-binary' : 'model/step' : 'image/png';
+      if (this.storage === 'cloud' && this.uploadBackend === 'supabase') {
+        const pathname = `uploads/${id}.${extension}`;
+        const ticket = await fetch('/api/upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pathname, size: blob.size }) });
+        if (!ticket.ok) throw new Error(await apiError(ticket));
+        const { url, pathname: reserved } = await ticket.json() as { url: string; pathname: string };
+        if (reserved !== pathname || !url) throw new Error('保存先の発行に失敗しました。');
+        const response = await fetch(url, { method: 'PUT', headers: { 'Content-Type': contentType, 'x-upsert': 'false', 'Cache-Control': 'max-age=3600' }, body: blob, credentials: 'omit' });
+        if (!response.ok) throw new Error('Supabaseへのファイル送信に失敗しました。容量・通信状態を確認して再度お試しください。');
+        return pathname;
+      }
       if (this.storage === 'cloud') {
         const result = await upload(`uploads/${id}.${extension}`, blob, {
           access: 'private', handleUploadUrl: '/api/upload', contentType, multipart: kind === 'model',
@@ -51,7 +63,9 @@ export class ModelLibrary extends EventTarget {
       if (!response.ok) throw new Error(await apiError(response));
       return ((await response.json()) as { pathname: string }).pathname;
     };
-    const [modelPathname, thumbnailPathname] = await Promise.all([put(file, 'model'), thumbnail ? put(thumbnail, 'thumbnail') : undefined]);
+    const [modelPathname, thumbnailPathname] = this.uploadBackend === 'supabase'
+      ? [await put(file, 'model'), thumbnail ? await put(thumbnail, 'thumbnail') : undefined]
+      : await Promise.all([put(file, 'model'), thumbnail ? put(thumbnail, 'thumbnail') : undefined]);
     const response = await fetch('/api/models', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: file.name, modelPathname, thumbnailPathname }),

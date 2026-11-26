@@ -31,6 +31,7 @@ export interface AssemblyData { version: 1; parts: AssemblyPart[] }
 export interface LibraryResponse {
   models: ModelRecord[];
   storage: 'local' | 'cloud';
+  uploadBackend?: 'supabase';
   limits: { maxFileBytes: number; maxModels: number };
 }
 
