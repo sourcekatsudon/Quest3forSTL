@@ -47,7 +47,9 @@ async function checked(response: Response): Promise<Response> {
   throw new ApiError(503, 'Supabaseの保存先が利用できません。接続・権限・容量を確認してください。');
 }
 export async function rpc<T>(name: string, args: object): Promise<T> {
-  return (await checked(await request('/rest/v1/rpc/' + name, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(args) }))).json() as Promise<T>;
+  const response = await checked(await request('/rest/v1/rpc/' + name, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(args) }));
+  const body = await response.text();
+  return (body ? JSON.parse(body) : undefined) as T;
 }
 export type Entry<T> = {
   id: string; status: 'reserved' | 'published' | 'deleted';

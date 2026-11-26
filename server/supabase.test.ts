@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { assetRedirect, bytes, entries, signUpload, storagePath, usesSupabase } from './supabase-rest.js';
+import { assetRedirect, bytes, entries, rpc, signUpload, storagePath, usesSupabase } from './supabase-rest.js';
 import { ApiError } from './validation.js';
 
 test('Supabase REST uses server credentials only for server requests, validates paths and limits bytes', async () => {
@@ -19,6 +19,8 @@ test('Supabase REST uses server credentials only for server requests, validates 
    if(target.includes('/upload/sign/')) return Response.json({url:'/object/upload/sign/stl-room-assets/'+path+'?token=upload-token'});
    if(target.includes('/object/sign/')) return Response.json({signedURL:'/object/sign/stl-room-assets/'+path+'?token=read-token'});
    if(target.includes('/authenticated/')) return new Response(new Uint8Array([1,2,3]));
+   if(target.includes('/rpc/stl_room_rate')) return new Response(null,{status:204});
+   if(target.includes('/rpc/stl_room_reserve')) return Response.json({code:'P0001',message:'quota'},{status:400});
    if(target.includes('/rest/v1/')) return Response.json([]);
    throw new Error('unexpected request');
   };
@@ -30,6 +32,8 @@ test('Supabase REST uses server credentials only for server requests, validates 
   assert.match(asset.headers.get('Location')!,/token=read-token$/);
   assert.deepEqual(await bytes(path,3),new Uint8Array([1,2,3]));
   await assert.rejects(bytes(path,2),(e:unknown)=>e instanceof ApiError && e.status===413);
+  assert.equal(await rpc('stl_room_rate',{p_ip:'test'}),undefined);
+  await assert.rejects(rpc('stl_room_reserve',{}),(e:unknown)=>e instanceof ApiError && e.status===409);
   assert.deepEqual(await entries('model'),[]);
   assert.ok(seen.some(url=>url.includes('/rest/v1/stl_room_entries?')));
   assert.ok(!seen.some(url=>url.includes('fake-secret')));
