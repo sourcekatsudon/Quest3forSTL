@@ -30,7 +30,7 @@ it('VR STEP explosion preserves world-space part dimensions and manual scale acr
  const {group,parts}=createAssembly({geometry,dimensions:{width:380,depth:60,height:80},triangles:24,parts:[{name:'left',path:[],start:0,count:12},{name:'right',path:[],start:12,count:12}]},new MeshStandardMaterial());
  group.position.set(.3,1.2,-.5);group.rotation.y=.42;group.scale.setScalar(.7);
  const scale=group.scale.clone(),position=group.position.clone(),rotation=group.quaternion.clone();
- const size=()=>parts.map(p=>new Box3().setFromObject(p.mesh,true).getSize(new Vector3()));
+ const size=()=>{group.updateWorldMatrix(true,true);return parts.map(p=>new Box3().setFromObject(p.mesh,true).getSize(new Vector3()));};
  const separation=()=>parts[0].mesh.getWorldPosition(new Vector3()).distanceTo(parts[1].mesh.getWorldPosition(new Vector3()));
  const initial=applyRoomExplosion(group,parts,0),before=size();
  for(const fraction of [.1,1,.3,1,0]){
