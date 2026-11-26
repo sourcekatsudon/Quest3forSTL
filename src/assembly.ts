@@ -70,6 +70,16 @@ export function modelBounds(root:Object3D,target=new Box3()):Box3{
  return target;
 }
 
+/** VR explosion changes only part translations. Return the centered local box
+ * extents for the collider; never normalize the root to the exploded bounds.
+ * This preserves both actual-size mode and the user's manual zoom. */
+export function applyRoomExplosion(root:Object3D,parts:ExplodedPart[],fraction:number):[number,number,number]{
+ applyExplosion(parts,fraction);
+ const bounds=modelBounds(root);
+ const extent=(axis:number)=>Math.max(.001,2*Math.max(Math.abs(bounds.min.getComponent(axis)),Math.abs(bounds.max.getComponent(axis))));
+ return [extent(0),extent(1),extent(2)];
+}
+
 export function disposeAssembly(parts:ExplodedPart[]){for(const part of parts)if(part.generated)part.mesh.geometry.dispose();}
 
 export function assemblyRadius(group:Group):number{
