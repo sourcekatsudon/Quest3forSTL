@@ -1,5 +1,6 @@
 {
-  "buildCommand": "npm run build",
+  "installCommand": "npm ci --onnxruntime-node-install-cuda=skip",
+  "buildCommand": "npm run typecheck && npm test && npm run build",
   "outputDirectory": "dist",
   "framework": "vite",
   "regions": [
